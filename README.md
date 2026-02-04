@@ -218,6 +218,74 @@ cp agents.md.example ~/.openclaw/workspace/AGENTS.md
 
 設定完成後，請在聊天室測試「幫我畫一隻貓」，圖片應該直接顯示而非連結。
 
+## Cloud Run 服務操作（關機／開機／重啟）
+
+以下指令請將 `YOUR_PROJECT_ID`、`asia-east1`、`clawdbot` 替換為你的專案 ID、區域與服務名稱。
+
+### 常用操作一覽
+
+| 想做什麼 | 作法 |
+|----------|------|
+| **關機**（縮到零、沒流量就停） | 維持 `min-instances=0`，不要打服務即可；一段時間無流量 instance 會關掉。 |
+| **關機**（不給外人連） | `gcloud run services update clawdbot --region=asia-east1 --project=YOUR_PROJECT_ID --no-allow-unauthenticated` |
+| **開機**（有人連才啟動） | 直接開 Dashboard 或打服務 URL，Cloud Run 會自動冷啟動。 |
+| **開機**（常駐、減少斷線） | `gcloud run services update clawdbot ... --min-instances=1` |
+| **重啟**（換新修訂） | 重新 deploy 或 `gcloud run services update ... --image=...` |
+| **查看狀態** | `gcloud run services describe clawdbot --region=asia-east1 --project=YOUR_PROJECT_ID` |
+
+### 關機
+
+```bash
+# 方式一：改為需登入，一般人無法開啟（服務仍在，只是不對外開放）
+gcloud run services update clawdbot \
+  --region=asia-east1 \
+  --project=YOUR_PROJECT_ID \
+  --no-allow-unauthenticated
+
+# 方式二：刪除服務（完全移除，要再用需重新 deploy）
+# gcloud run services delete clawdbot --region=asia-east1 --project=YOUR_PROJECT_ID
+```
+
+### 開機／常駐
+
+```bash
+# 至少保留 1 個 instance，減少「縮到零後斷線」
+gcloud run services update clawdbot \
+  --region=asia-east1 \
+  --project=YOUR_PROJECT_ID \
+  --min-instances=1
+```
+
+若要改回「沒流量就縮到零」以省費：
+
+```bash
+gcloud run services update clawdbot \
+  --region=asia-east1 \
+  --project=YOUR_PROJECT_ID \
+  --min-instances=0
+```
+
+### 重新對外開放（先前用 --no-allow-unauthenticated 關機時）
+
+```bash
+gcloud run services update clawdbot \
+  --region=asia-east1 \
+  --project=YOUR_PROJECT_ID \
+  --allow-unauthenticated
+```
+
+### 重啟（部署新修訂）
+
+```bash
+# 用現有映像再 deploy 一次，會產生新修訂
+gcloud run services update clawdbot \
+  --region=asia-east1 \
+  --project=YOUR_PROJECT_ID \
+  --image=asia-east1-docker.pkg.dev/YOUR_PROJECT_ID/clawdbot-repo/clawdbot:v1
+```
+
+或透過 Cloud Build 重新建置並部署（見上方「Build and Deploy」）。
+
 ## Troubleshooting
 
 - **日誌**：

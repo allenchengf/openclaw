@@ -111,3 +111,18 @@ export OPENCLAW_GATEWAY_URL="https://clawdbot-25031024592.asia-east1.run.app"
 ```
 
 映像預設為 `OPENCLAW_CLAWDBOT_IMAGE`，可覆寫。
+
+---
+
+## 四、Cloud Run 服務操作（關機／開機／重啟）
+
+| 操作 | 指令要點 |
+|------|----------|
+| 關機（縮到零） | 維持 `min-instances=0`，無流量即停。 |
+| 關機（不對外） | `gcloud run services update clawdbot ... --no-allow-unauthenticated` |
+| 開機（常駐減斷線） | `gcloud run services update clawdbot ... --min-instances=1` |
+| 重新對外 | `... --allow-unauthenticated` |
+| 重啟 | `gcloud run services update ... --image=...` 或重新 build + deploy |
+| 查狀態 | `gcloud run services describe clawdbot --region=... --project=...` |
+
+完整指令與參數見專案根目錄 [README.md](../README.md#cloud-run-服務操作關機開機重啟)。
