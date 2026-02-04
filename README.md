@@ -108,9 +108,9 @@ gcloud secrets create clawdbot-googlechat-sa \
 ### 6. Build and Deploy
 
 ```bash
-# Build with Cloud Build
+# Build with Cloud Build（建議同時傳入 gateway token，否則容器會產生隨機 token，Dashboard/CLI 無法預知）
 gcloud builds submit --config=cloudbuild.yaml \
-  --substitutions=_GEMINI_API_KEY="YOUR_API_KEY" \
+  --substitutions=_GEMINI_API_KEY="YOUR_API_KEY",_OPENCLAW_GATEWAY_TOKEN="YOUR_64CHAR_HEX_TOKEN" \
   --project=YOUR_PROJECT_ID
 
 # Or deploy manually
@@ -122,7 +122,7 @@ gcloud run deploy clawdbot \
   --memory=2Gi \
   --cpu=1 \
   --min-instances=1 \
-  --set-env-vars="GEMINI_API_KEY=YOUR_KEY" \
+  --set-env-vars="GEMINI_API_KEY=YOUR_KEY,OPENCLAW_GATEWAY_TOKEN=YOUR_GATEWAY_TOKEN" \
   --set-secrets="GOOGLE_CHAT_SERVICE_ACCOUNT_FILE=clawdbot-googlechat-sa:latest"
 ```
 
@@ -134,8 +134,11 @@ gcloud run deploy clawdbot \
 ├── cloudbuild.yaml              # Cloud Build configuration
 ├── agents.md.example            # AI 指令範本（圖片格式）
 ├── env.example.txt              # 環境變數範本
+├── docs/
+│   └── GCP-部署對照與問題分析.md # 部署對照、CLI 遠端連線、pairing/token 排錯
 ├── scripts/
-│   └── cloudrun-entrypoint.sh   # Runtime config generator
+│   ├── cloudrun-entrypoint.sh   # Runtime config generator
+│   └── devices-remote.sh        # 本機對遠端 Gateway 執行 devices list/approve
 └── extensions/
     └── nano-banana/             # Image generation plugin
         ├── clawdbot.plugin.json
@@ -150,12 +153,22 @@ gcloud run deploy clawdbot \
 | Variable | Description |
 |----------|-------------|
 | `GEMINI_API_KEY` | Your Gemini API key |
+| `OPENCLAW_GATEWAY_TOKEN` | Gateway 認證用 token；部署時建議設為固定值，Dashboard 與 CLI 連線需帶此 token |
+| `OPENCLAW_GATEWAY_URL` | 本機 CLI 連遠端時用（例：`https://YOUR_SERVICE.run.app`）；僅用於 `scripts/devices-remote.sh` 等 |
 | `GOOGLE_CHAT_AUDIENCE` | Cloud Run service URL (auto-detected if not set) |
 | `PORT` | Server port (default: 8080) |
 | `LINE_CHANNEL_SECRET` | LINE OA Channel Secret |
 | `LINE_CHANNEL_ACCESS_TOKEN` | LINE OA Channel Access Token |
 
 > 請勿提交含機密的 `.env` 檔，請使用 `env.example.txt` 作為範本。
+
+## Dashboard 與 CLI 連線
+
+- **Dashboard**：請用帶 token 的網址開啟，例如  
+  `https://YOUR_SERVICE_URL?token=YOUR_OPENCLAW_GATEWAY_TOKEN`  
+  否則會出現「device identity required」或「token mismatch」。
+- **本機 CLI**（如 `devices list`、`gateway health`）：需在指令中加上 `--url wss://YOUR_SERVICE_URL` 與 `--token YOUR_TOKEN`，或使用 `scripts/devices-remote.sh`。  
+  詳見 [docs/GCP-部署對照與問題分析.md](docs/GCP-部署對照與問題分析.md)。
 
 ## Usage
 
@@ -207,10 +220,11 @@ cp agents.md.example ~/.openclaw/workspace/AGENTS.md
 
 ## Troubleshooting
 
-Check logs:
-```bash
-gcloud run services logs read clawdbot --region=asia-east1 --limit=50
-```
+- **日誌**：
+  ```bash
+  gcloud run services logs read clawdbot --region=asia-east1 --limit=50
+  ```
+- **token mismatch / pairing required / device identity required**：請用帶 token 的 Dashboard URL，並在 Cloud Run 設定固定的 `OPENCLAW_GATEWAY_TOKEN`。詳見 [docs/GCP-部署對照與問題分析.md](docs/GCP-部署對照與問題分析.md)。
 
 ## License
 

@@ -1,0 +1,48 @@
+# openclaw-Taiwan Cloud Run 映像
+# 與官方一致：從 OpenClaw 原始碼建置，得到 dist/index.js，再疊加本專案 entrypoint
+# 參考：https://github.com/openclaw/openclaw/blob/main/Dockerfile
+
+# ---- 階段 1：從原始碼建置 OpenClaw（與官方 Dockerfile 相同邏輯）----
+FROM node:22-bookworm AS builder
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git ca-certificates curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Bun（官方 build 需要）
+RUN curl -fsSL https://bun.sh/install | bash
+ENV PATH="/root/.bun/bin:${PATH}"
+
+RUN corepack enable && corepack prepare pnpm@latest --activate
+
+WORKDIR /openclaw
+
+# 只 clone 最近一次 commit，縮短建置時間
+RUN git clone --depth 1 https://github.com/openclaw/openclaw.git .
+
+RUN pnpm install --frozen-lockfile
+
+RUN OPENCLAW_A2UI_SKIP_MISSING=1 pnpm build
+
+ENV OPENCLAW_PREFER_PNPM=1
+RUN pnpm ui:build
+
+# ---- 階段 2：執行用映像 ----
+FROM node:22-bookworm-slim
+
+WORKDIR /app
+
+# 複製完整建置結果（monorepo 需保留結構，與官方映像一致）
+COPY --from=builder /openclaw .
+
+# 本專案：Cloud Run entrypoint（寫入 ~/.openclaw/openclaw.json 後啟動 gateway）
+COPY scripts/cloudrun-entrypoint.sh /scripts/cloudrun-entrypoint.sh
+RUN chmod +x /scripts/cloudrun-entrypoint.sh
+
+# 擴充套件（nano-banana）
+COPY extensions /app/extensions
+
+ENV NODE_ENV=production
+ENV PORT=8080
+
+ENTRYPOINT ["/scripts/cloudrun-entrypoint.sh"]
