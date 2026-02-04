@@ -231,6 +231,7 @@ cp agents.md.example ~/.openclaw/workspace/AGENTS.md
 | **開機**（有人連才啟動） | 直接開 Dashboard 或打服務 URL，Cloud Run 會自動冷啟動。 |
 | **開機**（常駐、減少斷線） | `gcloud run services update clawdbot ... --min-instances=1` |
 | **重啟**（換新修訂） | 重新 deploy 或 `gcloud run services update ... --image=...` |
+| **刪除後快速重起** | 見下方「刪除服務後快速重新起服務」：`gcloud builds submit` 或 `gcloud run deploy` |
 | **查看狀態** | `gcloud run services describe clawdbot --region=asia-east1 --project=YOUR_PROJECT_ID` |
 
 ### 關機
@@ -285,6 +286,38 @@ gcloud run services update clawdbot \
 ```
 
 或透過 Cloud Build 重新建置並部署（見上方「Build and Deploy」）。
+
+### 刪除服務後快速重新起服務
+
+若已用 `gcloud run services delete clawdbot ...` 完全移除服務，可用以下方式快速重建。
+
+**方式一：一條指令建置＋部署（推薦，映像會一併建好）**
+
+```bash
+cd /path/to/repo
+
+gcloud builds submit --config=cloudbuild.yaml \
+  --project=YOUR_PROJECT_ID \
+  --substitutions=_GEMINI_API_KEY="你的Gemini金鑰",_OPENCLAW_GATEWAY_TOKEN="你的64字元gateway_token"
+```
+
+約 8～10 分鐘後服務即會重新上線。
+
+**方式二：映像已存在時，只部署不建置**
+
+若 Artifact Registry 裡仍有 `clawdbot:v1`，可只執行 deploy：
+
+```bash
+gcloud run deploy clawdbot \
+  --image=asia-east1-docker.pkg.dev/YOUR_PROJECT_ID/clawdbot-repo/clawdbot:v1 \
+  --region=asia-east1 \
+  --platform=managed \
+  --allow-unauthenticated \
+  --project=YOUR_PROJECT_ID \
+  --set-env-vars=GEMINI_API_KEY=你的金鑰,OPENCLAW_GATEWAY_TOKEN=你的gateway_token
+```
+
+若連 Artifact Registry 的 repository 都已刪除，需先建立 repo 再執行方式一。
 
 ## Troubleshooting
 
