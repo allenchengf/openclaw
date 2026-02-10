@@ -326,6 +326,11 @@ gcloud run deploy clawdbot \
   gcloud run services logs read clawdbot --region=asia-east1 --limit=50
   ```
 - **token mismatch / pairing required / device identity required**：請用帶 token 的 Dashboard URL，並在 Cloud Run 設定固定的 `OPENCLAW_GATEWAY_TOKEN`。詳見 [docs/GCP-部署對照與問題分析.md](docs/GCP-部署對照與問題分析.md)。
+- **Chat 回覆是空的（有助理欄位但沒文字）**：
+  1. **避免 instance 在回覆時被關掉**：設 `--min-instances=1`（見上方「Cloud Run 服務操作」），否則縮到零或換修訂時會送 SIGTERM，回覆可能沒送完就斷線。
+  2. **發送後不要重整或換頁**：WebSocket 若在回覆送出一半時斷線（code 1001），前端可能收不到完整內容；同一頁等 10～30 秒再判斷。
+  3. **確認 Gemini API 金鑰**：Cloud Run 環境變數 `GEMINI_API_KEY` 正確且有效；Config 裡 `agents.defaults.model.primary` 為 `google/gemini-3-flash-preview`。
+  4. 日誌若只有 `webchat connected/disconnected`、沒有 model/agent 相關紀錄，多半是連線或 instance 生命週期問題，先做 1、2 再試。
 
 ## License
 

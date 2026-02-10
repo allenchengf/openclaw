@@ -28,7 +28,8 @@ if [ -n "$SERVICE_ACCOUNT_FILE" ]; then
 {
   "gateway": {
     "auth": { "mode": "token", "token": "\${OPENCLAW_GATEWAY_TOKEN}" },
-    "controlUi": { "dangerouslyDisableDeviceAuth": true }
+    "controlUi": { "dangerouslyDisableDeviceAuth": true },
+    "trustedProxies": ["169.254.169.126", "127.0.0.1"]
   },
   "channels": {
     "googlechat": {
@@ -53,7 +54,8 @@ else
 {
   "gateway": {
     "auth": { "mode": "token", "token": "\${OPENCLAW_GATEWAY_TOKEN}" },
-    "controlUi": { "dangerouslyDisableDeviceAuth": true }
+    "controlUi": { "dangerouslyDisableDeviceAuth": true },
+    "trustedProxies": ["169.254.169.126", "127.0.0.1"]
   },
   "channels": {
     "googlechat": {
