@@ -72,7 +72,7 @@ docker run --rm --entrypoint "" \
 若 token 在環境變數裡，可先 export 再傳給容器：
 
 ```bash
-export OPENCLAW_GATEWAY_TOKEN="1c7b52e71367a743d25b58c35ed98ab4ae66a523f44546879671d086caa35f18"
+export OPENCLAW_GATEWAY_TOKEN="YOUR_64_CHAR_HEX_TOKEN"
 docker run --rm --entrypoint "" \
   -e OPENCLAW_GATEWAY_TOKEN="$OPENCLAW_GATEWAY_TOKEN" \
   asia-east1-docker.pkg.dev/.../clawdbot:v1 \

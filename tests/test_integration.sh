@@ -2,7 +2,7 @@
 # 整合測試：用 deploy/Dockerfile build 映像 → 啟動容器 → smoke。
 # 驗證重構後的映像仍能正確啟動 gateway、token 驗證行為正確。
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
-cd "$REPO_ROOT"
+cd "$REPO_ROOT" || exit 1
 
 echo "═══ 整合測試 (test_integration) ═══"
 

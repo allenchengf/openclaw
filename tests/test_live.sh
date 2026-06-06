@@ -2,7 +2,7 @@
 # 對「已部署的 Cloud Run 服務」做煙霧測試。
 # 從 .env 讀 OPENCLAW_PUBLIC_URL 與 OPENCLAW_GATEWAY_TOKEN（或由環境傳入）。
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
-cd "$REPO_ROOT"
+cd "$REPO_ROOT" || exit 1
 
 echo "═══ 線上煙霧測試 (test_live) ═══"
 

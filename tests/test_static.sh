@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # 靜態檢查：檔案結構、bash 語法、JS 語法、YAML / JSON 合法性。
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
-cd "$REPO_ROOT"
+cd "$REPO_ROOT" || exit 1
 
 echo "═══ 靜態檢查 (test_static) ═══"
 
@@ -77,16 +77,6 @@ section "shell 變數緊接全形字元防護（set -u 解析陷阱）"
 hits=$(grep -rnE '\$[A-Za-z_][A-Za-z0-9_]*[（）：，「」、。]' deploy/*.sh scripts/*.sh tests/*.sh 2>/dev/null || true)
 [[ -z "$hits" ]] && ok "無 \$var 緊接全形字元（應用 \${var}）" || ko "無 \$var 緊接全形字元" "$hits"
 
-section "選用 linter"
-if command -v shellcheck >/dev/null 2>&1; then
-  assert_cmd "shellcheck entrypoint" shellcheck -S error deploy/entrypoint.sh
-else
-  skip "shellcheck" "未安裝（brew install shellcheck）"
-fi
-if command -v hadolint >/dev/null 2>&1; then
-  assert_cmd "hadolint Dockerfile" hadolint deploy/Dockerfile
-else
-  skip "hadolint" "未安裝（brew install hadolint）"
-fi
+# 註：shellcheck / hadolint / gitleaks 等業界 linter 由 tests/test_lint.sh 專責（含正確 ignore 規則）。
 
 finish

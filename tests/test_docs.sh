@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # 文件正確性測試：README / .env.example 與實作一致（指令、路徑、變數無錯）。
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
-cd "$REPO_ROOT"
+cd "$REPO_ROOT" || exit 1
 
 echo "═══ 文件正確性 (test_docs) ═══"
 

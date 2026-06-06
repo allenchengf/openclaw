@@ -267,6 +267,14 @@ test-install: ## make install 多情境測試（stub gcloud）
 test-vm: ## GCE VM 部署多情境測試（stub gcloud）
 	@bash tests/test_vm.sh
 
+.PHONY: test-lint
+test-lint: ## 業界 lint/安全掃描（shellcheck/hadolint/gitleaks）
+	@bash tests/test_lint.sh
+
+.PHONY: lint-trivy
+lint-trivy: ## trivy 掃描容器映像漏洞+機密（需先 build-local）
+	@trivy image --scanners vuln,secret --severity HIGH,CRITICAL 905368131 905368131 12 62 79 80 81 701 33 98 100 204 250 395 398 399LOCAL_NAME) 2>/dev/null || echo "先 make build-local"
+
 .PHONY: test-doctor
 test-doctor: ## doctor 健檢多情境測試（stub gcloud）
 	@bash tests/test_doctor.sh

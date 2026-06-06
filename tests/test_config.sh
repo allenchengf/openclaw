@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # 單元測試：deploy/gen-config.mjs 產生的設定（用 node 跑、jq 斷言）。
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
-cd "$REPO_ROOT"
+cd "$REPO_ROOT" || exit 1
 
 echo "═══ 設定產生器單元測試 (test_config) ═══"
 

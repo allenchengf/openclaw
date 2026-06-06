@@ -329,21 +329,25 @@ make vm-logs          # 看容器日誌
 完全用本機可得工具（`bash`/`node`/`docker`），缺 `shellcheck`/`hadolint`/`PyYAML` 會自動略過。
 
 ```bash
-make test              # 完整：static + docs + config + makefile + integration
-make test-static       # 結構 / 語法 / YAML / ignore 一致性 / 設定漂移防護
+make test              # 完整：static/docs/config/makefile/install/vm/doctor/lint/integration
+make test-static       # 結構 / 語法 / YAML / ignore 一致性 / 設定漂移防護 / 全形字元
 make test-docs         # README / .env.example 與實作一致性
 make test-config       # 設定產生器單元測試（gen-config.mjs 各分支）
 make test-makefile     # Makefile 編排 / 負面 / 冪等（stub gcloud，不碰雲端）
 make test-install      # make install 多情境（7 情境，stub gcloud）
 make test-vm           # GCE VM 部署多情境（stub gcloud）
 make test-doctor       # doctor 健檢多情境（stub gcloud）
-make test-integration  # build 映像 → 啟動 → HTTP/token smoke
+make test-lint         # 業界 lint/安全掃描：shellcheck + hadolint + gitleaks
+make lint-trivy        # trivy 容器映像漏洞 + 機密掃描（需先 make build-local）
+make test-integration  # build 映像 → 啟動 → HTTP/token / 記憶回歸 smoke
 make test-live         # 對已部署服務煙霧測試（讀 .env 的 URL+token）
 make doctor            # 功能檢測（本機 + GCP 前置 + 服務健康 + token）
 
 bash tests/run.sh --no-docker   # 跳過整合測試
 bash tests/run.sh --live        # 額外跑線上測試
 ```
+
+> 業界主流工具：`brew install shellcheck hadolint gitleaks trivy`。`make test` 會跑 shellcheck/hadolint/gitleaks（未裝則略過）；`trivy` 因較重獨立為 `make lint-trivy`（其回報的 base 映像 / 上游相依 CVE 屬資訊性）。
 
 完整的測試矩陣（QA 工作流程窮舉 600+ 案例、驗收標準與手動清單）見 **[docs/TEST-PLAN.md](docs/TEST-PLAN.md)**。
 
