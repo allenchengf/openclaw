@@ -210,6 +210,10 @@ test-docs: ## 文件正確性（README/.env.example 與實作一致）
 test-makefile: ## Makefile 編排/負面/冪等（stub gcloud）
 	@bash tests/test_makefile.sh
 
+.PHONY: test-install
+test-install: ## make install 多情境測試（stub gcloud）
+	@bash tests/test_install.sh
+
 .PHONY: test-integration
 test-integration: ## 整合測試：build 映像 → 啟動 → smoke（需 docker）
 	@bash tests/test_integration.sh

@@ -7,7 +7,7 @@
 set -uo pipefail
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-suites=(test_static.sh test_docs.sh test_config.sh test_makefile.sh)
+suites=(test_static.sh test_docs.sh test_config.sh test_makefile.sh test_install.sh)
 [[ "$*" == *--no-docker* ]] || suites+=(test_integration.sh)
 [[ "$*" == *--live* ]] && suites+=(test_live.sh)
 
