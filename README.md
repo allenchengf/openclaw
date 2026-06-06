@@ -300,9 +300,9 @@ OpenClaw 有長期記憶系統（學習偏好、身分、專案），存於 `~/.
 
 兩個關鍵注意點：
 
-1. **記憶搜尋預設用 OpenAI embedding** → 未設 `OPENAI_API_KEY` 會出現 `Memory Search ❌ ERROR`（`sync failed: No API key found for provider "openai"`）。
-   本框架**預設 `OPENCLAW_MEMORY_PROVIDER=gemini`**，沿用既有 Gemini 金鑰做語意記憶（免 OpenAI、保留語意搜尋）。
-   設 `OPENCLAW_MEMORY_PROVIDER=none` 則停用 embedding（僅關鍵字搜尋，完全免金鑰）。
+1. **記憶搜尋的 embedding provider** → OpenClaw 內建記憶引擎預設用 OpenAI embedding，未設 `OPENAI_API_KEY` 會出現 `Memory Search ❌ ERROR`（`sync failed: No API key found for provider "openai"`）。
+   本框架**預設 `OPENCLAW_MEMORY_PROVIDER=none`**（關鍵字記憶 + `MEMORY.md`，完全免金鑰、最穩定，記憶仍跨重啟保留）。
+   進階：設 `OPENCLAW_MEMORY_PROVIDER=gemini` 用 Gemini 金鑰做語意記憶（需 `gemini-embedding-001` 向量表 `chunks_vec` 可用，slim 映像可能缺）。
 
 2. **Cloud Run 是無狀態的** → `~/.openclaw` 在容器重啟（換修訂 / 縮放 / 冷啟動）後**全部重置**，所以 bot 會「忘記」剛取的名字、`MEMORY.md` 顯示 Missing。
 
@@ -373,9 +373,9 @@ bash tests/run.sh --live        # 額外跑線上測試
 | **403 Forbidden（`server: Google Frontend`）** | Cloud Run IAM 缺 `allUsers`。執行 `make allow-public`。注意：這是 Google 前端擋的，不是 app |
 | **403（openclaw 自身回傳）** | control UI `allowedOrigins` 未含公開 URL。`make refresh-url` 後重新部署 |
 | **Dashboard「驗證不相符 / token_mismatch」** | 瀏覽器快取舊 token。用**無痕視窗** + `make dashboard-url` 的 fragment 網址 |
-| **圖片畫不出（429 / resource exhausted）** | Gemini 圖片配額用盡。換綁定計費專案的標準 `AIza` 金鑰：`make secret-set-gemini KEY=...` 再 `make deploy` |
+| **回覆失敗 / 跑很久出不來 / `turn failed`（429 RESOURCE_EXHAUSTED）** | Gemini 模型配額用盡。preview 版（`gemini-3-flash-preview`）免費配額極低；改用 GA 的 `gemini-2.5-flash`（預設）：`OPENCLAW_MODEL` 設定後重新部署 |
 | **回覆有時中斷/空白** | 縮到零時 SIGTERM 中斷。設 `make min-instances N=1` |
-| **Memory Search ❌ ERROR**（`No API key for provider openai`） | 記憶 embedding 預設走 OpenAI。本框架預設 `OPENCLAW_MEMORY_PROVIDER=gemini`（用 Gemini 金鑰）；舊部署請重新 `make deploy`/`make vm-deploy` |
+| **Memory Search ❌ ERROR**（`No API key for provider openai`） | 記憶 embedding 預設走 OpenAI。本框架預設 `OPENCLAW_MEMORY_PROVIDER=none`（關鍵字記憶，免金鑰）；舊部署請重新 `make deploy`/`make vm-deploy` |
 | **bot 忘記名字 / `MEMORY.md` Missing** | Cloud Run 無狀態，記憶不跨重啟。改用 `make vm-deploy`（GCE VM + 持久磁碟）|
 | **記憶 `no such table: chunks_vec`** | gemini 向量索引需 chunks_vec 表（slim 映像易缺）。用預設 `OPENCLAW_MEMORY_PROVIDER=none`（關鍵字記憶，免向量）|
 | **Cron tool error（設提醒失敗）** | cron 未啟用。本框架預設 `cron.enabled=true`；舊部署重新 `make deploy`/`make vm-deploy` |
