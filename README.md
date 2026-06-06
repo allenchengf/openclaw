@@ -3,10 +3,8 @@
 > 針對台灣開發者的 **OpenClaw** 一鍵部署框架 —— Google Cloud Run / GCE VM、Google Chat 與 LINE OA（含群組 @ 提及）、Gemini 模型與圖片生成。
 
 [![Platform](https://img.shields.io/badge/deploy-Cloud%20Run-blue)](https://cloud.google.com/run)
-[![Model](https://img.shields.io/badge/model-Gemini%203%20Flash-orange)](https://ai.google.dev/)
+[![Model](https://img.shields.io/badge/model-Gemini%202.5%20Flash-orange)](https://ai.google.dev/)
 [![License](https://img.shields.io/badge/license-GPL--3.0-green)](LICENSE)
-
-By Ian Wu, The Pocket Company。歡迎台灣開發者一起完善這個框架。
 
 ---
 
@@ -16,6 +14,7 @@ By Ian Wu, The Pocket Company。歡迎台灣開發者一起完善這個框架。
 - [架構](#架構)
 - [專案結構](#專案結構)
 - [需求](#需求)
+- [從零開始：建立 GCP 資源](#從零開始建立-gcp-資源)
 - [快速開始](#快速開始)
 - [設定參考（.env）](#設定參考env)
 - [Make 指令一覽](#make-指令一覽)
@@ -32,7 +31,7 @@ By Ian Wu, The Pocket Company。歡迎台灣開發者一起完善這個框架。
 
 ## 特色
 
-- **主模型**：Gemini 3 Flash Preview（可由 `OPENCLAW_MODEL` 切換）
+- **主模型**：Gemini 2.5 Flash（GA、配額穩定；可由 `OPENCLAW_MODEL` 切換，如 `google/gemini-3-flash-preview`）
 - **圖片生成**：Nano Banana 擴充
 - **頻道**：Google Chat（私訊 + 群組）、LINE OA（私訊 + 群組 @ 提及）
 - **部署**：Cloud Run（預設）或 GCE VM
@@ -106,11 +105,51 @@ By Ian Wu, The Pocket Company。歡迎台灣開發者一起完善這個框架。
 
 ## 需求
 
-1. GCP 專案，**已啟用計費**
-2. 已安裝並登入 [`gcloud`](https://cloud.google.com/sdk/docs/install)（`gcloud auth login`）
-3. `make`、`docker`、`node`（本機測試用）
-4. Gemini API Key（[AI Studio](https://aistudio.google.com/apikey)）
-   - 文字有免費額度；**圖片生成需有圖片配額**，建議用綁定計費專案的標準 `AIza` 金鑰
+- 本機：`gcloud`、`make`、`docker`、`node`、`openssl`、`curl`
+- 一個 Google 帳號（可建立 GCP 專案）
+- Gemini API Key（下方步驟 5 取得）
+
+---
+
+## 從零開始：建立 GCP 資源
+
+第一次使用、手上還沒有任何 GCP 資源時，照下面做。**只有「建專案 / 開計費 / 裝 gcloud / 取金鑰」需要手動**；其餘（啟用 API、建 Artifact Registry、存金鑰）`make install` 會自動完成。
+
+### 1. 建立 GCP 專案並啟用計費
+1. 進 [Google Cloud Console](https://console.cloud.google.com/) → 頂部專案選單 → **新增專案**（記下 **專案 ID**，如 `openclaw-taiwan-123456`）。
+2. 左側 **帳單** → 連結一個帳單帳戶（Cloud Run / Artifact Registry 需要計費）。
+
+### 2. 安裝並登入 gcloud
+```bash
+# macOS：brew install --cask google-cloud-sdk（或見官方安裝頁）
+gcloud auth login
+gcloud config set project YOUR_PROJECT_ID
+```
+
+### 3.（選用）安裝本機工具
+```bash
+# macOS（make 通常隨 Xcode Command Line Tools；docker 用 Docker Desktop）
+brew install node jq
+```
+
+### 4. 取得程式碼
+```bash
+git clone <repo> && cd openclaw-taiwan
+```
+
+### 5. 取得 Gemini API Key
+1. 開 [Google AI Studio – API Key](https://aistudio.google.com/apikey)，用同一個 Google 帳號登入。
+2. **Create API key** → 建議選「在現有 GCP 專案中建立」並選你步驟 1 的專案（圖片生成需綁定計費專案的配額）。
+3. 複製金鑰（`AIza...` 開頭）。
+
+### 6. 填 `.env` 後一鍵安裝
+```bash
+cp .env.example .env
+$EDITOR .env          # 填：GCP_PROJECT_ID、GCP_ACCOUNT、GEMINI_API_KEY（共 3 項）
+make install          # 自動：啟用API → 建Artifact Registry → 存金鑰 → 建置部署 → 補URL/IAM → 健檢
+```
+
+> `make install` 自動執行的等同：`make bootstrap`（`gcloud services enable run/cloudbuild/artifactregistry/secretmanager` + 建 `clawdbot-repo` 映像庫）、部署、`make allow-public`、`make doctor`。手動逐步見 [快速開始 › 進階](#快速開始)。
 
 ---
 
@@ -180,7 +219,7 @@ make refresh-url          # 取得實際 URL 寫回 .env 並更新服務
 | `MIN_INSTANCES` | 常駐實例數（1=減少冷啟動/回覆中斷） | `1` |
 | `MEMORY` / `CPU` | 資源配置 | `2Gi` / `1` |
 | `GEMINI_API_KEY` | 留空則自 Secret Manager 取 | （空） |
-| `OPENCLAW_MODEL` | 主模型 | `google/gemini-3-flash-preview` |
+| `OPENCLAW_MODEL` | 主模型（GA 配額穩定；preview 版配額極低易 429） | `google/gemini-2.5-flash` |
 | `OPENCLAW_MEMORY_PROVIDER` | 記憶 embedding：`none`(關鍵字,免金鑰最穩)/`gemini`(語意,需向量表)/`openai` | `none` |
 | `OPENCLAW_TIMEZONE` | 時區（AI 提示中的現在時間） | `Asia/Taipei` |
 | `GCE_ZONE` / `GCE_VM_NAME` / `GCE_MACHINE_TYPE` / `GCE_DATA_DISK_SIZE` | GCE VM 部署參數 | `<region>-b` / `clawdbot-vm` / `e2-small` / `10GB` |

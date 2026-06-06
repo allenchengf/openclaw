@@ -20,7 +20,7 @@ substitutions:
   _GEMINI_API_KEY: ''
   _OPENCLAW_GATEWAY_TOKEN: ''
   _OPENCLAW_PUBLIC_URL: ''
-  _OPENCLAW_MODEL: 'google/gemini-3-flash-preview'
+  _OPENCLAW_MODEL: 'google/gemini-2.5-flash'
   _OPENCLAW_MEMORY_PROVIDER: 'gemini'
   _MIN_INSTANCES: '1'
   _MEMORY: 2Gi

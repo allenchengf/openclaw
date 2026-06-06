@@ -19,7 +19,7 @@ OPENCLAW_VERSION?= 2026.6.1
 MIN_INSTANCES   ?= 1
 MEMORY          ?= 2Gi
 CPU             ?= 1
-OPENCLAW_MODEL  ?= google/gemini-3-flash-preview
+OPENCLAW_MODEL  ?= google/gemini-2.5-flash
 OPENCLAW_MEMORY_PROVIDER ?= gemini
 
 # 防呆：去除值的前後空白（避免 .env 行內註解殘留空白污染衍生變數）
@@ -176,6 +176,10 @@ logs: check-env ## 讀取最近日誌（N=行數，預設 50）
 GCE_ZONE         ?= $(GCP_REGION)-b
 GCE_VM_NAME      ?= clawdbot-vm
 GCE_MACHINE_TYPE ?= e2-small
+
+.PHONY: vm-https
+vm-https: check-env ## 為 VM 接上 HTTPS 反向代理（Caddy + Let's Encrypt via nip.io）
+	@bash deploy/vm-https.sh
 
 .PHONY: vm-deploy
 vm-deploy: check-env ## 部署/更新 GCE VM（COS + 持久磁碟，記憶跨重啟保留）

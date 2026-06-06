@@ -8,7 +8,7 @@ echo "═══ 靜態檢查 (test_static) ═══"
 section "best-practice 檔案結構"
 for f in README.md LICENSE Makefile .env.example .gitignore .dockerignore .gcloudignore \
          deploy/Dockerfile deploy/cloudbuild.yaml deploy/entrypoint.sh deploy/gen-config.mjs \
-         deploy/gce-deploy.sh scripts/devices-remote.sh scripts/doctor.sh tests/run.sh; do
+         deploy/gce-deploy.sh deploy/vm-https.sh scripts/devices-remote.sh scripts/doctor.sh tests/run.sh; do
   [[ -f "$f" ]] && ok "存在 $f" || ko "存在 $f" "缺少檔案"
 done
 [[ ! -f Dockerfile.cloudrun ]] && ok "舊路徑已移除 Dockerfile.cloudrun" || ko "舊路徑已移除 Dockerfile.cloudrun"

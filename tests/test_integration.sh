@@ -65,7 +65,7 @@ section "設定路徑與模型解析（OPENCLAW_HOME 回歸防護）"
 val=$(docker exec "$NAME" bash -lc 'openclaw config validate 2>&1' 2>/dev/null)
 assert_contains "openclaw config validate 通過" "$val" "Config valid"
 mp=$(docker exec "$NAME" bash -lc 'openclaw config get agents.defaults.model.primary 2>&1' 2>/dev/null)
-assert_eq "解析到 google 模型（非掉回預設）" "google/gemini-3-flash-preview" "$mp"
+assert_eq "解析到 google 模型（非掉回預設）" "google/gemini-2.5-flash" "$mp"
 tz=$(docker exec "$NAME" bash -lc 'openclaw config get agents.defaults.userTimezone 2>&1' 2>/dev/null)
 assert_eq "userTimezone=Asia/Taipei" "Asia/Taipei" "$tz"
 cron=$(docker exec "$NAME" bash -lc 'openclaw config get cron.enabled 2>&1' 2>/dev/null)

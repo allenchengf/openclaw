@@ -9,7 +9,7 @@
 //   OPENCLAW_GATEWAY_TOKEN   gateway 認證 token（必填）
 //   OPENCLAW_PUBLIC_URL      對外公開 URL（control UI allowedOrigins + Google Chat audience）
 //   GOOGLE_CHAT_AUDIENCE     覆寫 Google Chat audience（預設 = OPENCLAW_PUBLIC_URL）
-//   OPENCLAW_MODEL           主要模型（預設 google/gemini-3-flash-preview）
+//   OPENCLAW_MODEL           主要模型（預設 google/gemini-2.5-flash）
 //   GOOGLECHAT_ENABLED       是否啟用 Google Chat 頻道（預設 true）
 //   GOOGLE_CHAT_SERVICE_ACCOUNT_FILE  Service Account JSON 路徑（有則加入 googlechat）
 //   LINE_CHANNEL_SECRET / LINE_CHANNEL_ACCESS_TOKEN  兩者皆有則啟用 LINE 頻道
@@ -33,7 +33,7 @@ if (!token) {
 
 const publicUrl = env.OPENCLAW_PUBLIC_URL || "https://clawdbot.asia-east1.run.app";
 const audience = env.GOOGLE_CHAT_AUDIENCE || publicUrl;
-const model = env.OPENCLAW_MODEL || "google/gemini-3-flash-preview";
+const model = env.OPENCLAW_MODEL || "google/gemini-2.5-flash";
 
 // Service account：明確指定，或偵測 Cloud Run 慣用掛載路徑
 let saFile = env.GOOGLE_CHAT_SERVICE_ACCOUNT_FILE || "";
