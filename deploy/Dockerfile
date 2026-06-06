@@ -14,8 +14,11 @@ FROM node:${NODE_VERSION}
 
 # 執行期相依：git（部分 agent 功能需要）、ca-certificates（HTTPS）、tini（PID 1 正確處理訊號）
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      git ca-certificates tini \
+      git ca-certificates tini tzdata \
     && rm -rf /var/lib/apt/lists/*
+
+# 時區：預設台灣（可由執行期 TZ 環境變數覆寫）
+ENV TZ=Asia/Taipei
 
 WORKDIR /app
 

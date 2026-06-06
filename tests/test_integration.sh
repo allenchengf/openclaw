@@ -27,7 +27,8 @@ else
 fi
 
 section "CONFIG_ONLY 模式（不啟動 gateway 只產生設定）"
-co=$(docker run --rm -e OPENCLAW_GATEWAY_TOKEN="$TOK" -e GEMINI_API_KEY="secret-mem-key" -e CLAWDBOT_CONFIG_ONLY=1 "$IMG" 2>&1)
+# 用 gemini provider 確保 config 內有 apiKey 可驗證遮蔽
+co=$(docker run --rm -e OPENCLAW_GATEWAY_TOKEN="$TOK" -e GEMINI_API_KEY="secret-mem-key" -e OPENCLAW_MEMORY_PROVIDER=gemini -e CLAWDBOT_CONFIG_ONLY=1 "$IMG" 2>&1)
 assert_contains "印出 config 路徑" "$co" "Config written"
 assert_contains "token 已遮蔽顯示"  "$co" '"token": "***"'
 assert_contains "apiKey 已遮蔽顯示" "$co" '"apiKey": "***"'
@@ -65,11 +66,16 @@ val=$(docker exec "$NAME" bash -lc 'openclaw config validate 2>&1' 2>/dev/null)
 assert_contains "openclaw config validate 通過" "$val" "Config valid"
 mp=$(docker exec "$NAME" bash -lc 'openclaw config get agents.defaults.model.primary 2>&1' 2>/dev/null)
 assert_eq "解析到 google 模型（非掉回預設）" "google/gemini-3-flash-preview" "$mp"
-prov=$(docker exec "$NAME" bash -lc 'openclaw config get agents.defaults.memorySearch.provider 2>&1' 2>/dev/null)
-assert_eq "memorySearch.provider=gemini" "gemini" "$prov"
-# 啟動日誌應出現 google 模型自動啟用、且無 openai embedding 錯誤
+tz=$(docker exec "$NAME" bash -lc 'openclaw config get agents.defaults.userTimezone 2>&1' 2>/dev/null)
+assert_eq "userTimezone=Asia/Taipei" "Asia/Taipei" "$tz"
+cron=$(docker exec "$NAME" bash -lc 'openclaw config get cron.enabled 2>&1' 2>/dev/null)
+assert_eq "cron.enabled=true" "true" "$cron"
+# 預設記憶 provider=none → memorySearch 停用；啟動日誌應有 google 模型、且無 openai 錯誤
+mem=$(docker exec "$NAME" bash -lc 'openclaw config get agents.defaults.memorySearch.enabled 2>&1' 2>/dev/null)
+assert_eq "memorySearch 預設停用(none)" "false" "$mem"
 boot=$(docker logs "$NAME" 2>&1)
 assert_contains "google 模型自動啟用" "$boot" "model configured, enabled automatically"
 assert_not_contains "無 openai embedding 金鑰錯誤" "$boot" 'No API key found for provider "openai"'
+assert_not_contains "無 chunks_vec 記憶錯誤" "$boot" "chunks_vec"
 
 finish

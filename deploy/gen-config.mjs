@@ -42,10 +42,14 @@ if (!saFile && existsSync("/secrets/google-chat-sa/key.json")) {
 }
 
 // 記憶搜尋的 embedding provider。OpenClaw 內建記憶引擎預設用 OpenAI embedding，
-// 未設 OPENAI_API_KEY 時會出現 "[memory] sync failed: No API key found for provider openai"。
-// 預設改用 "gemini" → 沿用既有 GEMINI_API_KEY 做語意記憶（免 OpenAI、保留語意搜尋）。
-// 設 OPENCLAW_MEMORY_PROVIDER=none 則停用 embedding 記憶搜尋（僅關鍵字，完全免金鑰）。
-const memoryProvider = env.OPENCLAW_MEMORY_PROVIDER || "gemini";
+// 未設 OPENAI_API_KEY 時會出現 "sync failed: No API key found for provider openai"。
+// 預設 "none"：停用 embedding 向量搜尋（僅關鍵字 + MEMORY.md，完全免金鑰、最穩定，
+//   記憶仍跨重啟保留）。slim 映像的 gemini 向量索引需 chunks_vec 表，易出錯，故不預設。
+// 進階：設 OPENCLAW_MEMORY_PROVIDER=gemini 用 Gemini 金鑰做語意記憶（需向量表可用）。
+const memoryProvider = env.OPENCLAW_MEMORY_PROVIDER || "none";
+
+// 時區：影響 AI 提示中的「現在時間」。預設台灣。
+const userTimezone = env.OPENCLAW_TIMEZONE || "Asia/Taipei";
 
 // 依 provider 組出記憶搜尋設定：
 //  none   → 停用 embedding（僅關鍵字，完全免金鑰）
@@ -75,10 +79,14 @@ const config = {
     trustedProxies: ["169.254.169.126", "127.0.0.1"],
   },
   channels: {},
+  // 提醒/排程功能（未啟用時 bot 設定提醒會出現 Cron tool error）
+  cron: { enabled: true, maxConcurrentRuns: 8, sessionRetention: "24h" },
   agents: {
     defaults: {
       model: { primary: model },
       memorySearch: buildMemorySearch(memoryProvider, env),
+      userTimezone,
+      timeFormat: "24",
     },
   },
 };

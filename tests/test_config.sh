@@ -47,16 +47,23 @@ section "案例7：自訂模型"
 out=$(OPENCLAW_GATEWAY_TOKEN="$TOK" OPENCLAW_MODEL="google/gemini-2.5-flash" node "$GEN" --stdout 2>/dev/null)
 assert_eq "model 可覆寫" "google/gemini-2.5-flash" "$(jget "$out" '.agents.defaults.model.primary')"
 
-section "案例9：記憶 embedding provider（預設 gemini，免 OpenAI）"
-out=$(OPENCLAW_GATEWAY_TOKEN="$TOK" GEMINI_API_KEY=AIzaMEMKEY node "$GEN" --stdout 2>/dev/null)
-ms=$(jget "$out" '.agents.defaults.memorySearch')
-assert_eq "provider 預設 gemini"          "gemini"               "$(jget "$out" '.agents.defaults.memorySearch.provider')"
-assert_eq "model = gemini-embedding-001"  "gemini-embedding-001" "$(jget "$out" '.agents.defaults.memorySearch.model')"
-assert_eq "remote.apiKey 帶入 Gemini 金鑰" "AIzaMEMKEY"           "$(jget "$out" '.agents.defaults.memorySearch.remote.apiKey')"
-out=$(OPENCLAW_GATEWAY_TOKEN="$TOK" OPENCLAW_MEMORY_PROVIDER=none node "$GEN" --stdout 2>/dev/null)
-assert_eq "provider=none → 停用 memorySearch" "false" "$(jget "$out" '.agents.defaults.memorySearch.enabled')"
+section "案例9：記憶 embedding provider（預設 none，免金鑰最穩）"
+out=$(OPENCLAW_GATEWAY_TOKEN="$TOK" node "$GEN" --stdout 2>/dev/null)
+assert_eq "預設 none → 停用 memorySearch" "false" "$(jget "$out" '.agents.defaults.memorySearch.enabled')"
+out=$(OPENCLAW_GATEWAY_TOKEN="$TOK" GEMINI_API_KEY=AIzaMEMKEY OPENCLAW_MEMORY_PROVIDER=gemini node "$GEN" --stdout 2>/dev/null)
+assert_eq "gemini → provider"             "gemini"               "$(jget "$out" '.agents.defaults.memorySearch.provider')"
+assert_eq "gemini → model"                "gemini-embedding-001" "$(jget "$out" '.agents.defaults.memorySearch.model')"
+assert_eq "gemini → remote.apiKey"        "AIzaMEMKEY"           "$(jget "$out" '.agents.defaults.memorySearch.remote.apiKey')"
 out=$(OPENCLAW_GATEWAY_TOKEN="$TOK" OPENCLAW_MEMORY_PROVIDER=openai node "$GEN" --stdout 2>/dev/null)
-assert_eq "provider 可覆寫為 openai" "openai" "$(jget "$out" '.agents.defaults.memorySearch.provider')"
+assert_eq "openai 可覆寫" "openai" "$(jget "$out" '.agents.defaults.memorySearch.provider')"
+
+section "案例10：時區與 Cron"
+out=$(OPENCLAW_GATEWAY_TOKEN="$TOK" node "$GEN" --stdout 2>/dev/null)
+assert_eq "userTimezone 預設 Asia/Taipei" "Asia/Taipei" "$(jget "$out" '.agents.defaults.userTimezone')"
+assert_eq "timeFormat=24"                 "24"          "$(jget "$out" '.agents.defaults.timeFormat')"
+assert_eq "cron.enabled=true"             "true"        "$(jget "$out" '.cron.enabled')"
+out=$(OPENCLAW_GATEWAY_TOKEN="$TOK" OPENCLAW_TIMEZONE=America/Chicago node "$GEN" --stdout 2>/dev/null)
+assert_eq "時區可覆寫"                     "America/Chicago" "$(jget "$out" '.agents.defaults.userTimezone')"
 
 section "案例8：寫入檔案模式"
 tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT

@@ -181,7 +181,8 @@ make refresh-url          # 取得實際 URL 寫回 .env 並更新服務
 | `MEMORY` / `CPU` | 資源配置 | `2Gi` / `1` |
 | `GEMINI_API_KEY` | 留空則自 Secret Manager 取 | （空） |
 | `OPENCLAW_MODEL` | 主模型 | `google/gemini-3-flash-preview` |
-| `OPENCLAW_MEMORY_PROVIDER` | 記憶 embedding provider：`gemini`(用 Gemini 金鑰)/`none`(停用)/`openai` | `gemini` |
+| `OPENCLAW_MEMORY_PROVIDER` | 記憶 embedding：`none`(關鍵字,免金鑰最穩)/`gemini`(語意,需向量表)/`openai` | `none` |
+| `OPENCLAW_TIMEZONE` | 時區（AI 提示中的現在時間） | `Asia/Taipei` |
 | `GCE_ZONE` / `GCE_VM_NAME` / `GCE_MACHINE_TYPE` / `GCE_DATA_DISK_SIZE` | GCE VM 部署參數 | `<region>-b` / `clawdbot-vm` / `e2-small` / `10GB` |
 | `OPENCLAW_GATEWAY_TOKEN` | 64 字元 hex；Dashboard/CLI 驗證 | （`make gen-token`） |
 | `OPENCLAW_PUBLIC_URL` | 對外 URL（allowedOrigins/audience） | （`make refresh-url`） |
@@ -337,6 +338,10 @@ bash tests/run.sh --live        # 額外跑線上測試
 | **回覆有時中斷/空白** | 縮到零時 SIGTERM 中斷。設 `make min-instances N=1` |
 | **Memory Search ❌ ERROR**（`No API key for provider openai`） | 記憶 embedding 預設走 OpenAI。本框架預設 `OPENCLAW_MEMORY_PROVIDER=gemini`（用 Gemini 金鑰）；舊部署請重新 `make deploy`/`make vm-deploy` |
 | **bot 忘記名字 / `MEMORY.md` Missing** | Cloud Run 無狀態，記憶不跨重啟。改用 `make vm-deploy`（GCE VM + 持久磁碟）|
+| **記憶 `no such table: chunks_vec`** | gemini 向量索引需 chunks_vec 表（slim 映像易缺）。用預設 `OPENCLAW_MEMORY_PROVIDER=none`（關鍵字記憶，免向量）|
+| **Cron tool error（設提醒失敗）** | cron 未啟用。本框架預設 `cron.enabled=true`；舊部署重新 `make deploy`/`make vm-deploy` |
+| **時間顯示 UTC / 不對** | 預設 `OPENCLAW_TIMEZONE=Asia/Taipei` + 映像 `TZ=Asia/Taipei`；舊部署重新部署 |
+| **圖片生成 429（resource exhausted）** | Gemini 圖片配額限制。用綁定計費專案的標準 `AIza` 金鑰，並注意免費圖片配額很低 |
 | **CLI 連遠端 gateway** | 用 `scripts/devices-remote.sh`，或加 `--url wss://... --token ...` |
 
 更多排錯見 [docs/GCP-部署對照與問題分析.md](docs/GCP-部署對照與問題分析.md)。
