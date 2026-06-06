@@ -1,0 +1,88 @@
+# openclaw-Taiwan Cloud Build：build → push → deploy 到 Cloud Run。
+#
+# 建議透過 Makefile 提交（會自動帶入 .env 的值）：
+#   make deploy
+#
+# 或直接提交（在 repo 根目錄；context 為 "."）：
+#   gcloud builds submit --config=deploy/cloudbuild.yaml \
+#     --substitutions=_GCP_PROJECT_ID=...,_GEMINI_API_KEY=...,_OPENCLAW_GATEWAY_TOKEN=...,_OPENCLAW_PUBLIC_URL=...
+#
+# 注意：Cloud Build 服務帳號通常無權設定 IAM，故 `--allow-unauthenticated` 可能靜默失效。
+# 部署後請以擁有者帳號執行 `make allow-public` 補上 allUsers→run.invoker（見 README）。
+
+substitutions:
+  _GCP_PROJECT_ID: ''
+  _GCP_REGION: asia-east1
+  _AR_REPO_NAME: clawdbot-repo
+  _SERVICE_NAME: clawdbot
+  _TAG: v1
+  _OPENCLAW_VERSION: '2026.6.1'
+  _GEMINI_API_KEY: ''
+  _OPENCLAW_GATEWAY_TOKEN: ''
+  _OPENCLAW_PUBLIC_URL: ''
+  _OPENCLAW_MODEL: 'google/gemini-3-flash-preview'
+  _MIN_INSTANCES: '1'
+  _MEMORY: 2Gi
+  _CPU: '1'
+  # 頻道（由 .env 帶入；gen-config.mjs 於容器內據此產生 openclaw.json）
+  _GOOGLECHAT_ENABLED: 'true'
+  _LINE_CHANNEL_SECRET: ''
+  _LINE_CHANNEL_ACCESS_TOKEN: ''
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+
+images:
+  - '${_GCP_REGION}-docker.pkg.dev/${_GCP_PROJECT_ID}/${_AR_REPO_NAME}/${_SERVICE_NAME}:${_TAG}'
+
+steps:
+  # 讓 Docker 可推送到 Artifact Registry
+  - id: docker-auth
+    name: 'gcr.io/cloud-builders/gcloud'
+    entrypoint: bash
+    args:
+      - '-c'
+      - 'gcloud auth configure-docker ${_GCP_REGION}-docker.pkg.dev --quiet'
+
+  # 建置映像（context = repo 根目錄，使用 deploy/Dockerfile）
+  - id: build
+    name: 'gcr.io/cloud-builders/docker'
+    waitFor: [docker-auth]
+    args:
+      - build
+      - '-t'
+      - '${_GCP_REGION}-docker.pkg.dev/${_GCP_PROJECT_ID}/${_AR_REPO_NAME}/${_SERVICE_NAME}:${_TAG}'
+      - '-f'
+      - 'deploy/Dockerfile'
+      - '--build-arg'
+      - 'OPENCLAW_VERSION=${_OPENCLAW_VERSION}'
+      - '.'
+
+  # 推送到 Artifact Registry
+  - id: push
+    name: 'gcr.io/cloud-builders/docker'
+    waitFor: [build]
+    args:
+      - push
+      - '${_GCP_REGION}-docker.pkg.dev/${_GCP_PROJECT_ID}/${_AR_REPO_NAME}/${_SERVICE_NAME}:${_TAG}'
+
+  # 部署到 Cloud Run
+  - id: deploy
+    name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    waitFor: [push]
+    args:
+      - run
+      - deploy
+      - '${_SERVICE_NAME}'
+      - '--image=${_GCP_REGION}-docker.pkg.dev/${_GCP_PROJECT_ID}/${_AR_REPO_NAME}/${_SERVICE_NAME}:${_TAG}'
+      - '--region=${_GCP_REGION}'
+      - '--platform=managed'
+      - '--allow-unauthenticated'
+      - '--memory=${_MEMORY}'
+      - '--cpu=${_CPU}'
+      - '--min-instances=${_MIN_INSTANCES}'
+      - '--port=8080'
+      - '--timeout=300'
+      - '--set-env-vars=^@@^GEMINI_API_KEY=${_GEMINI_API_KEY}@@OPENCLAW_GATEWAY_TOKEN=${_OPENCLAW_GATEWAY_TOKEN}@@OPENCLAW_PUBLIC_URL=${_OPENCLAW_PUBLIC_URL}@@OPENCLAW_MODEL=${_OPENCLAW_MODEL}@@GOOGLECHAT_ENABLED=${_GOOGLECHAT_ENABLED}@@LINE_CHANNEL_SECRET=${_LINE_CHANNEL_SECRET}@@LINE_CHANNEL_ACCESS_TOKEN=${_LINE_CHANNEL_ACCESS_TOKEN}'
+      - '--project=${_GCP_PROJECT_ID}'

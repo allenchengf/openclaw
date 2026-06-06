@@ -1,0 +1,17 @@
+# 縮小 build context、避免機密進入映像
+.git
+.github
+.env
+.env.*
+.gateway-token.env
+*.key
+*-sa.json
+service-account*.json
+tests/
+docs/
+demo/
+examples/
+*.md
+!README.md
+.DS_Store
+node_modules/

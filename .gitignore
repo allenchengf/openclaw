@@ -1,0 +1,16 @@
+# 環境變數與機密（切勿提交）
+.env
+.env.*
+!.env.example
+.gateway-token.env
+*.key
+*-sa.json
+service-account*.json
+
+# 作業系統
+.DS_Store
+
+# Node / 測試暫存
+node_modules/
+tests/.tmp/
+*.log

@@ -1,0 +1,14 @@
+# 控制 `gcloud builds submit` 上傳的 source tarball 內容
+.git
+.github
+.env
+.env.*
+.gateway-token.env
+*.key
+*-sa.json
+service-account*.json
+tests/
+docs/
+demo/
+.DS_Store
+node_modules/

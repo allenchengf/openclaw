@@ -1,338 +1,317 @@
-# openclaw-Taiwan
+# openclaw-Taiwan 🦞
 
-By Ian Wu, The Pocket Company
+> 針對台灣開發者的 **OpenClaw** 一鍵部署框架 —— Google Cloud Run / GCE VM、Google Chat 與 LINE OA（含群組 @ 提及）、Gemini 模型與圖片生成。
 
-openclaw-Taiwan 是一個針對台灣開發者的 OpenClaw 部署框架，支援 GCP Cloud Run、GCE VM、Google Chat 與 LINE OA（包含群組 @ 提及）。希望台灣開發者可以一起完善這個框架。
+[![Platform](https://img.shields.io/badge/deploy-Cloud%20Run-blue)](https://cloud.google.com/run)
+[![Model](https://img.shields.io/badge/model-Gemini%203%20Flash-orange)](https://ai.google.dev/)
+[![License](https://img.shields.io/badge/license-GPL--3.0-green)](LICENSE)
 
-## Features
+By Ian Wu, The Pocket Company。歡迎台灣開發者一起完善這個框架。
 
-- **Main AI Model**: Gemini 3 Flash Preview
-- **Image Generation**: Nano Banana tools
-- **Channels**: Google Chat（私訊 + 群組）、LINE OA（私訊 + 群組 @ 提及）
-- **Deployment**: Cloud Run 或 GCE VM
+---
 
-## Prerequisites
+## 目錄
 
-1. Google Cloud Project with billing enabled
-2. APIs enabled:
-   - Cloud Run API
-   - Cloud Build API
-   - Artifact Registry API
-   - Secret Manager API
-3. Gemini API Key from [Google AI Studio](https://aistudio.google.com/apikey)
-4. Google Chat App configured (see below)
-5. LINE OA（Messaging API）Channel（若要使用 LINE）
+- [特色](#特色)
+- [架構](#架構)
+- [專案結構](#專案結構)
+- [需求](#需求)
+- [快速開始](#快速開始)
+- [設定參考（.env）](#設定參考env)
+- [Make 指令一覽](#make-指令一覽)
+- [頻道設定](#頻道設定)
+- [Dashboard / 網頁聊天](#dashboard--網頁聊天)
+- [測試](#測試)
+- [維運](#維運)
+- [疑難排解](#疑難排解)
+- [安全性](#安全性)
+- [貢獻](#貢獻)
+- [授權](#授權)
 
-## Setup
+---
 
-### 1. Configure Variables
+## 特色
 
-Edit `cloudbuild.yaml` and update the substitutions:
+- **主模型**：Gemini 3 Flash Preview（可由 `OPENCLAW_MODEL` 切換）
+- **圖片生成**：Nano Banana 擴充
+- **頻道**：Google Chat（私訊 + 群組）、LINE OA（私訊 + 群組 @ 提及）
+- **部署**：Cloud Run（預設）或 GCE VM
+- **維運**：單一 `Makefile` 入口、`.env` 集中設定、完整自動化測試
 
-```yaml
-substitutions:
-  _GCP_PROJECT_ID: your-project-id
-  _GCP_REGION: asia-east1  # or your preferred region
-  _AR_REPO_NAME: clawdbot-repo
-  _SERVICE_NAME: clawdbot
-  _TAG: v1
+### 設計重點
+
+| 決策 | 原因 |
+|------|------|
+| **npm 預編譯安裝** OpenClaw（非原始碼 build） | 從原始碼編譯時 `tsdown/rolldown` 會在 Cloud Build 內 **OOM 卡死**；npm 套件已含 gateway/channels/UI，建置 30 分鐘卡死 → 約 3 分鐘成功 |
+| **以 node 產生設定 JSON**（`deploy/gen-config.mjs`） | 取代 shell heredoc 字串拼接，正確跳脫、可單元測試（先前 token/origin bug 即源於字串拼接） |
+| **`.env` + `Makefile`** 集中參數 | 一處設定、一致指令；機密不進 git |
+
+---
+
+## 架構
+
+```
+                         ┌──────────────────────────────────────────┐
+  Google Chat ──webhook─▶│              Cloud Run                    │
+  LINE OA     ──webhook─▶│   ┌────────────────────────────────────┐ │
+  瀏覽器 Dashboard ─wss─▶│   │  OpenClaw gateway (npm, :8080)      │ │
+                         │   │   ├─ /googlechat  /line  webhook    │ │
+                         │   │   ├─ control UI / webchat (token)   │ │──▶ Gemini API
+                         │   │   └─ nano-banana 圖片生成擴充        │ │
+                         │   └────────────────────────────────────┘ │
+                         │   entrypoint.sh → gen-config.mjs           │
+                         └──────────────────────────────────────────┘
+                                   ▲ Secret Manager: gemini-api-key
 ```
 
-### 2. Create Artifact Registry Repository
+---
 
-```bash
-gcloud artifacts repositories create clawdbot-repo \
-  --repository-format=docker \
-  --location=asia-east1 \
-  --project=YOUR_PROJECT_ID
-```
-
-### 3. Store Secrets in Secret Manager
-
-```bash
-# Store Gemini API Key
-echo -n "YOUR_GEMINI_API_KEY" | gcloud secrets create gemini-api-key \
-  --data-file=- \
-  --project=YOUR_PROJECT_ID
-
-# Store Google Chat Service Account JSON
-gcloud secrets create clawdbot-googlechat-sa \
-  --data-file=path/to/service-account.json \
-  --project=YOUR_PROJECT_ID
-```
-
-### 4. Configure Google Chat App
-
-1. Go to [Google Cloud Console](https://console.cloud.google.com/apis/api/chat.googleapis.com/hangouts-chat)
-2. Create a new Chat App with:
-   - **App URL**: `https://YOUR_SERVICE_URL/googlechat`
-   - **Slash commands** (optional)
-3. Download the Service Account JSON key
-
-### 5. LINE OA 設定（選用）
-
-1. 到 LINE Developers Console 建立 Messaging API Channel
-2. 取得以下資訊：
-   - Channel Secret
-   - Channel Access Token（長期有效）
-3. Webhook URL 設定為：
-   - `https://YOUR_DOMAIN/line`
-4. 開啟「Use webhook」
-
-### LINE OA 整合說明
-
-- LINE 的 channel extension 由 OpenClaw 內建提供（不在本 repo 內），本專案負責部署與設定。
-- 啟用方式是提供 `LINE_CHANNEL_SECRET` / `LINE_CHANNEL_ACCESS_TOKEN`，並在 `openclaw.json` 中設定 channel。
-- 群組 @ 提及建議用 `groups.*.requireMention` 控制。
-
-範例設定：
-```json
-{
-  "channels": {
-    "line": {
-      "enabled": true,
-      "channelAccessToken": "YOUR_TOKEN",
-      "channelSecret": "YOUR_SECRET",
-      "webhookPath": "/line",
-      "dmPolicy": "open",
-      "allowFrom": ["*"],
-      "groupPolicy": "open",
-      "groups": {
-        "*": { "requireMention": true }
-      }
-    }
-  }
-}
-```
-
-### 6. Build and Deploy
-
-```bash
-# Build with Cloud Build（建議同時傳入 gateway token，否則容器會產生隨機 token，Dashboard/CLI 無法預知）
-gcloud builds submit --config=cloudbuild.yaml \
-  --substitutions=_GEMINI_API_KEY="YOUR_API_KEY",_OPENCLAW_GATEWAY_TOKEN="YOUR_64CHAR_HEX_TOKEN" \
-  --project=YOUR_PROJECT_ID
-
-# Or deploy manually
-gcloud run deploy clawdbot \
-  --image=REGION-docker.pkg.dev/PROJECT_ID/clawdbot-repo/clawdbot:TAG \
-  --region=asia-east1 \
-  --platform=managed \
-  --allow-unauthenticated \
-  --memory=2Gi \
-  --cpu=1 \
-  --min-instances=1 \
-  --set-env-vars="GEMINI_API_KEY=YOUR_KEY,OPENCLAW_GATEWAY_TOKEN=YOUR_GATEWAY_TOKEN" \
-  --set-secrets="GOOGLE_CHAT_SERVICE_ACCOUNT_FILE=clawdbot-googlechat-sa:latest"
-```
-
-## File Structure
+## 專案結構
 
 ```
 .
-├── Dockerfile.cloudrun          # Docker image for Cloud Run
-├── cloudbuild.yaml              # Cloud Build configuration
-├── agents.md.example            # AI 指令範本（圖片格式）
-├── env.example.txt              # 環境變數範本
-├── docs/
-│   └── GCP-部署對照與問題分析.md # 部署對照、CLI 遠端連線、pairing/token 排錯
+├── README.md                  # 本文件
+├── LICENSE / CONTRIBUTING.md
+├── Makefile                   # 維運入口（讀 .env）
+├── .env.example               # 設定範本（複製為 .env）
+├── .gitignore / .dockerignore / .gcloudignore
+├── deploy/
+│   ├── Dockerfile             # Cloud Run 映像（npm 安裝 openclaw）
+│   ├── cloudbuild.yaml        # build → push → deploy
+│   ├── entrypoint.sh          # 產生設定 + 啟動 gateway
+│   └── gen-config.mjs         # 設定產生器（可單元測試）
 ├── scripts/
-│   ├── cloudrun-entrypoint.sh   # Runtime config generator
-│   └── devices-remote.sh        # 本機對遠端 Gateway 執行 devices list/approve
-└── extensions/
-    └── nano-banana/             # Image generation plugin
-        ├── clawdbot.plugin.json
-        ├── package.json
-        ├── index.ts
-        └── src/
-            └── nano-banana-tool.ts
+│   └── devices-remote.sh      # 本機對遠端 gateway 執行 devices list/approve
+├── extensions/
+│   └── nano-banana/           # 圖片生成擴充
+├── tests/
+│   ├── run.sh                 # 測試總指揮
+│   ├── lib.sh                 # 斷言輔助
+│   ├── test_static.sh         # 靜態檢查（結構/語法/YAML）
+│   ├── test_config.sh         # 設定產生器單元測試
+│   ├── test_integration.sh    # 映像 build + 啟動 + smoke
+│   └── test_live.sh           # 對已部署服務煙霧測試
+├── examples/
+│   └── agents.md.example      # AGENTS.md 範本（圖片直接顯示用）
+└── docs/                      # 部署對照與排錯筆記
 ```
 
-## Environment Variables
+---
 
-| Variable | Description |
-|----------|-------------|
-| `GEMINI_API_KEY` | Your Gemini API key |
-| `OPENCLAW_GATEWAY_TOKEN` | Gateway 認證用 token；部署時建議設為固定值，Dashboard 與 CLI 連線需帶此 token |
-| `OPENCLAW_GATEWAY_URL` | 本機 CLI 連遠端時用（例：`https://YOUR_SERVICE.run.app`）；僅用於 `scripts/devices-remote.sh` 等 |
-| `GOOGLE_CHAT_AUDIENCE` | Cloud Run service URL (auto-detected if not set) |
-| `PORT` | Server port (default: 8080) |
-| `LINE_CHANNEL_SECRET` | LINE OA Channel Secret |
-| `LINE_CHANNEL_ACCESS_TOKEN` | LINE OA Channel Access Token |
+## 需求
 
-> 請勿提交含機密的 `.env` 檔，請使用 `env.example.txt` 作為範本。
+1. GCP 專案，**已啟用計費**
+2. 已安裝並登入 [`gcloud`](https://cloud.google.com/sdk/docs/install)（`gcloud auth login`）
+3. `make`、`docker`、`node`（本機測試用）
+4. Gemini API Key（[AI Studio](https://aistudio.google.com/apikey)）
+   - 文字有免費額度；**圖片生成需有圖片配額**，建議用綁定計費專案的標準 `AIza` 金鑰
 
-## Dashboard 與 CLI 連線
+---
 
-- **Dashboard**：請用帶 token 的網址開啟，例如  
-  `https://YOUR_SERVICE_URL?token=YOUR_OPENCLAW_GATEWAY_TOKEN`  
-  否則會出現「device identity required」或「token mismatch」。
-- **本機 CLI**（如 `devices list`、`gateway health`）：需在指令中加上 `--url wss://YOUR_SERVICE_URL` 與 `--token YOUR_TOKEN`，或使用 `scripts/devices-remote.sh`。  
-  詳見 [docs/GCP-部署對照與問題分析.md](docs/GCP-部署對照與問題分析.md)。
+## 快速開始
 
-## Usage
+### 🚀 最短路徑（一鍵安裝，給第一次使用的同學）
 
-Once deployed, you can:
-
-1. **Chat with AI**: Send messages in Google Chat
-2. **Generate Images**: Say "generate an image of a cat"
-3. **Edit Images**: Send an image and say "change the background to blue"
-
-## Demo Screenshots
-
-以下示意 openclaw-Taiwan 在 LINE 私訊與群組中的實際互動：
-
-![LINE demo 1](demo/1891188_0.jpg)
-![LINE demo 2](demo/1891189_0.jpg)
-![LINE demo 3](demo/1891190_0.jpg)
-
-## GCE VM (Compute Engine) 部署摘要
-
-- 建議使用 Nginx 作為反向代理，並設定 HTTPS (Let's Encrypt)
-- Webhook URL：
-  - Google Chat: `https://YOUR_DOMAIN/googlechat`
-  - LINE: `https://YOUR_DOMAIN/line`
-- 群組訊息建議設定為「需要 @ 提及」以避免被動觸發
-
-## AGENTS.md 設定（圖片直接顯示的關鍵）
-
-為了讓 AI 生成的圖片能**直接顯示在聊天室**（而非純文字連結），你需要在 OpenClaw workspace 建立 `AGENTS.md` 檔案。
-
-### 原理
-
-1. 圖片生成 skill（如 `nano-banana-pro`）會回傳 `MEDIA: https://...` 格式
-2. OpenClaw 偵測到 `MEDIA:` token 後，會自動轉換成原生圖片訊息
-3. 但 AI 模型可能會「優化」這個格式，把它變成 Markdown 連結
-4. `AGENTS.md` 的作用是明確告訴 AI：**不要改動 `MEDIA:` 格式**
-
-### 設定方式
+只需在 `.env` 填 **3 個必填項**，其餘自動處理：
 
 ```bash
-# 複製範本到 OpenClaw workspace
-cp agents.md.example ~/.openclaw/workspace/AGENTS.md
+git clone <repo> && cd openclaw-taiwan
+cp .env.example .env
+$EDITOR .env          # 填：GCP_PROJECT_ID、GCP_ACCOUNT、GEMINI_API_KEY
+
+make install          # 一鍵：token→啟用API→建庫→部署→補URL→開放→健檢
 ```
 
-或手動建立 `~/.openclaw/workspace/AGENTS.md`，內容參考本 repo 的 `agents.md.example`。
+完成後會印出 Dashboard 網址。`make install` 會自動：
+1. 產生 gateway token（若未填）
+2. 啟用必要 API + 建立 Artifact Registry
+3. 使用 `.env` 的 `GEMINI_API_KEY`（或 `make install KEY=AIza...`、或既有 Secret）
+4. 建置並部署到 Cloud Run
+5. 取得實際 URL 並更新服務（control UI / Chat audience 需正確 URL）
+6. 補上 `allUsers→run.invoker`（`--allow-unauthenticated` 在 Cloud Build 常失效）
+7. 執行 `make doctor` 健康檢查
 
-### 驗證
-
-設定完成後，請在聊天室測試「幫我畫一隻貓」，圖片應該直接顯示而非連結。
-
-## Cloud Run 服務操作（關機／開機／重啟）
-
-以下指令請將 `YOUR_PROJECT_ID`、`asia-east1`、`clawdbot` 替換為你的專案 ID、區域與服務名稱。
-
-### 常用操作一覽
-
-| 想做什麼 | 作法 |
-|----------|------|
-| **關機**（縮到零、沒流量就停） | 維持 `min-instances=0`，不要打服務即可；一段時間無流量 instance 會關掉。 |
-| **關機**（不給外人連） | `gcloud run services update clawdbot --region=asia-east1 --project=YOUR_PROJECT_ID --no-allow-unauthenticated` |
-| **開機**（有人連才啟動） | 直接開 Dashboard 或打服務 URL，Cloud Run 會自動冷啟動。 |
-| **開機**（常駐、減少斷線） | `gcloud run services update clawdbot ... --min-instances=1` |
-| **重啟**（換新修訂） | 重新 deploy 或 `gcloud run services update ... --image=...` |
-| **刪除後快速重起** | 見下方「刪除服務後快速重新起服務」：`gcloud builds submit` 或 `gcloud run deploy` |
-| **查看狀態** | `gcloud run services describe clawdbot --region=asia-east1 --project=YOUR_PROJECT_ID` |
-
-### 關機
+### 驗證與日常
 
 ```bash
-# 方式一：改為需登入，一般人無法開啟（服務仍在，只是不對外開放）
-gcloud run services update clawdbot \
-  --region=asia-east1 \
-  --project=YOUR_PROJECT_ID \
-  --no-allow-unauthenticated
-
-# 方式二：刪除服務（完全移除，要再用需重新 deploy）
-# gcloud run services delete clawdbot --region=asia-east1 --project=YOUR_PROJECT_ID
+make doctor           # 功能檢測（本機工具 + GCP 前置 + 服務健康 + token）
+make status           # 服務狀態
+make dashboard-url    # 帶 token 的 Dashboard 網址（用無痕視窗開）
+make test             # 完整自動化測試
 ```
 
-### 開機／常駐
+### 重新安裝 / 移除
 
 ```bash
-# 至少保留 1 個 instance，減少「縮到零後斷線」
-gcloud run services update clawdbot \
-  --region=asia-east1 \
-  --project=YOUR_PROJECT_ID \
-  --min-instances=1
+make reinstall            # 刪除服務後重新部署（保留映像庫與金鑰）
+make uninstall            # 只刪 Cloud Run 服務
+make teardown-all CONFIRM=yes   # ⚠ 全部移除：服務 + 映像庫 + 金鑰
 ```
 
-若要改回「沒流量就縮到零」以省費：
+### 進階（逐步，等同 install 的分解）
 
 ```bash
-gcloud run services update clawdbot \
-  --region=asia-east1 \
-  --project=YOUR_PROJECT_ID \
-  --min-instances=0
+make gen-token            # 產生 gateway token
+make bootstrap            # 啟用 API + 建映像庫
+make secret-set-gemini KEY=AIza...   # 金鑰存入 Secret Manager（選用）
+make deploy               # 建置 + 部署 + allow-public
+make refresh-url          # 取得實際 URL 寫回 .env 並更新服務
 ```
 
-### 重新對外開放（先前用 --no-allow-unauthenticated 關機時）
+---
+
+## 設定參考（.env）
+
+| 變數 | 說明 | 預設 |
+|------|------|------|
+| `GCP_PROJECT_ID` | GCP 專案 ID | — |
+| `GCP_REGION` | 區域 | `asia-east1` |
+| `GCP_ACCOUNT` | gcloud 帳號（多帳號區分） | — |
+| `AR_REPO_NAME` | Artifact Registry 庫名 | `clawdbot-repo` |
+| `SERVICE_NAME` | Cloud Run 服務名 | `clawdbot` |
+| `IMAGE_TAG` | 映像標籤 | `v1` |
+| `OPENCLAW_VERSION` | npm openclaw 版本 | `2026.6.1` |
+| `MIN_INSTANCES` | 常駐實例數（1=減少冷啟動/回覆中斷） | `1` |
+| `MEMORY` / `CPU` | 資源配置 | `2Gi` / `1` |
+| `GEMINI_API_KEY` | 留空則自 Secret Manager 取 | （空） |
+| `OPENCLAW_MODEL` | 主模型 | `google/gemini-3-flash-preview` |
+| `OPENCLAW_GATEWAY_TOKEN` | 64 字元 hex；Dashboard/CLI 驗證 | （`make gen-token`） |
+| `OPENCLAW_PUBLIC_URL` | 對外 URL（allowedOrigins/audience） | （`make refresh-url`） |
+| `GOOGLECHAT_ENABLED` | 是否啟用 Google Chat | `true` |
+| `LINE_CHANNEL_SECRET` / `LINE_CHANNEL_ACCESS_TOKEN` | 兩者皆填才啟用 LINE | （空） |
+
+---
+
+## Make 指令一覽
 
 ```bash
-gcloud run services update clawdbot \
-  --region=asia-east1 \
-  --project=YOUR_PROJECT_ID \
-  --allow-unauthenticated
+make help            # 列出全部指令
+make bootstrap       # 啟用 API + 建立映像庫
+make gen-token       # 產生並寫入 gateway token
+make deploy          # 建置 + 部署 + allow-public
+make refresh-url     # 取得實際 URL 寫回 .env 並更新服務
+make status / logs   # 查狀態 / 讀日誌（logs N=100）
+make min-instances N=1   # 設常駐實例
+make url / dashboard-url # 取服務網址 / 帶 token 的 Dashboard 網址
+make build-local / run-local / stop-local  # 本機 Docker
+make test            # 完整測試（static + config + integration）
+make secret-set-gemini KEY=...  # 更新 Gemini 金鑰
+make allow-public    # 補 allUsers→run.invoker
+make clean           # 清理本機容器/暫存
 ```
 
-### 重啟（部署新修訂）
+---
+
+## 頻道設定
+
+### Google Chat
+
+1. 開啟 [Google Chat API 設定](https://console.cloud.google.com/apis/api/chat.googleapis.com/hangouts-chat)
+2. 建立 Chat App，**App URL** 設為：`https://<你的服務URL>/googlechat`
+3. （選用）若需 Service Account 驗證，下載 JSON 並存入 Secret：
+   ```bash
+   gcloud secrets create clawdbot-googlechat-sa --data-file=path/to/sa.json --project=$GCP_PROJECT_ID
+   ```
+   並在 Cloud Run 掛載到 `/secrets/google-chat-sa/key.json`（entrypoint 會自動偵測）。
+
+### LINE OA（選用）
+
+1. [LINE Developers](https://developers.line.biz/console/) 建立 Messaging API Channel
+2. 取得 **Channel Secret** 與 **Channel Access Token**（長期）
+3. 填入 `.env` 的 `LINE_CHANNEL_SECRET` / `LINE_CHANNEL_ACCESS_TOKEN`，`make deploy`
+4. Webhook URL 設為：`https://<你的服務URL>/line`，並開啟「Use webhook」
+
+> 圖片要**直接顯示在聊天室**（而非純連結），請把 `examples/agents.md.example` 複製到 OpenClaw workspace 的 `AGENTS.md`。
+
+---
+
+## Dashboard / 網頁聊天
+
+OpenClaw 內建 control UI（`/`）與網頁聊天（`/chat`）。
 
 ```bash
-# 用現有映像再 deploy 一次，會產生新修訂
-gcloud run services update clawdbot \
-  --region=asia-east1 \
-  --project=YOUR_PROJECT_ID \
-  --image=asia-east1-docker.pkg.dev/YOUR_PROJECT_ID/clawdbot-repo/clawdbot:v1
+make dashboard-url    # 印出 https://.../chat?session=main#token=<TOKEN>
 ```
 
-或透過 Cloud Build 重新建置並部署（見上方「Build and Deploy」）。
+⚠️ **務必用無痕視窗開啟**：control UI 會把 token 快取在 localStorage，殘留的舊 token 會造成「驗證不相符（token_mismatch）」。token 透過 `#token=` fragment 帶入最穩。
 
-### 刪除服務後快速重新起服務
+> **遠端 Dashboard 的限制**：OpenClaw 對遠端瀏覽器要求裝置配對；本框架以 `dangerouslyDisableDeviceAuth` 讓「僅持 token 的瀏覽器 control UI」可連（適用 Cloud Run 純遠端情境）。CLI 等其他遠端客戶端仍需配對，詳見 [docs/](docs/)。
 
-若已用 `gcloud run services delete clawdbot ...` 完全移除服務，可用以下方式快速重建。
+---
 
-**方式一：一條指令建置＋部署（推薦，映像會一併建好）**
+## 測試
+
+完全用本機可得工具（`bash`/`node`/`docker`），缺 `shellcheck`/`hadolint`/`PyYAML` 會自動略過。
 
 ```bash
-cd /path/to/repo
+make test              # 完整：static + docs + config + makefile + integration
+make test-static       # 結構 / 語法 / YAML / ignore 一致性 / 設定漂移防護
+make test-docs         # README / .env.example 與實作一致性
+make test-config       # 設定產生器單元測試（gen-config.mjs 各分支）
+make test-makefile     # Makefile 編排 / 負面 / 冪等（stub gcloud，不碰雲端）
+make test-integration  # build 映像 → 啟動 → HTTP/token smoke
+make test-live         # 對已部署服務煙霧測試（讀 .env 的 URL+token）
+make doctor            # 功能檢測（本機 + GCP 前置 + 服務健康 + token）
 
-gcloud builds submit --config=cloudbuild.yaml \
-  --project=YOUR_PROJECT_ID \
-  --substitutions=_GEMINI_API_KEY="你的Gemini金鑰",_OPENCLAW_GATEWAY_TOKEN="你的64字元gateway_token"
+bash tests/run.sh --no-docker   # 跳過整合測試
+bash tests/run.sh --live        # 額外跑線上測試
 ```
 
-約 8～10 分鐘後服務即會重新上線。
+完整的測試矩陣（456 案例、驗收標準與手動清單）見 **[docs/TEST-PLAN.md](docs/TEST-PLAN.md)**。
 
-**方式二：映像已存在時，只部署不建置**
+測試涵蓋：檔案結構合規、所有腳本語法、設定產生器各分支、Makefile 一鍵安裝/重裝/移除/健檢的編排與負面與冪等、`.env` 行內註解防呆、部署設定漂移防護（頻道 env 必須傳遞）、映像可建置與啟動、token 經 `Authorization: Bearer` 的 200/401 行為、容器內設定正確性、已部署服務健康。
 
-若 Artifact Registry 裡仍有 `clawdbot:v1`，可只執行 deploy：
+---
+
+## 維運
+
+| 操作 | 指令 |
+|------|------|
+| 查狀態 | `make status` |
+| 讀日誌 | `make logs`（`make logs N=100`） |
+| 常駐（減少斷線） | `make min-instances N=1` |
+| 縮到零省費 | `make min-instances N=0` |
+| 重新部署 | `make deploy` |
+| 不對外開放 | `gcloud run services update $SERVICE_NAME --no-allow-unauthenticated --region=$GCP_REGION` |
+| 重新對外 | `make allow-public` |
+
+---
+
+## 疑難排解
+
+| 症狀 | 原因 / 解法 |
+|------|------------|
+| **建置卡在 `pnpm build` / tsdown 數十分鐘** | 從原始碼編譯會 OOM。本框架已改用 npm 預編譯安裝，勿改回原始碼 build |
+| **403 Forbidden（`server: Google Frontend`）** | Cloud Run IAM 缺 `allUsers`。執行 `make allow-public`。注意：這是 Google 前端擋的，不是 app |
+| **403（openclaw 自身回傳）** | control UI `allowedOrigins` 未含公開 URL。`make refresh-url` 後重新部署 |
+| **Dashboard「驗證不相符 / token_mismatch」** | 瀏覽器快取舊 token。用**無痕視窗** + `make dashboard-url` 的 fragment 網址 |
+| **圖片畫不出（429 / resource exhausted）** | Gemini 圖片配額用盡。換綁定計費專案的標準 `AIza` 金鑰：`make secret-set-gemini KEY=...` 再 `make deploy` |
+| **回覆有時中斷/空白** | 縮到零時 SIGTERM 中斷。設 `make min-instances N=1` |
+| **CLI 連遠端 gateway** | 用 `scripts/devices-remote.sh`，或加 `--url wss://... --token ...` |
+
+更多排錯見 [docs/GCP-部署對照與問題分析.md](docs/GCP-部署對照與問題分析.md)。
+
+---
+
+## 安全性
+
+- **機密不進 git**：`.env`、`*-sa.json`、`.gateway-token.env` 已列入 `.gitignore`；`.dockerignore`/`.gcloudignore` 確保不進映像與 build context
+- **Gemini 金鑰**建議存於 Secret Manager（`make secret-set-gemini`）
+- **gateway token** 請用 `make gen-token` 產生足夠長度的隨機值，勿沿用其他 gateway 的 token
+- `dangerouslyDisableDeviceAuth` / `dangerouslyAllowHostHeaderOriginFallback` 是為了 Cloud Run 純遠端可用性而開；若改用 GCE VM 或 IAP，請考慮關閉並改用裝置配對 / trusted-proxy
+
+---
+
+## 貢獻
+
+歡迎 PR！請見 [CONTRIBUTING.md](CONTRIBUTING.md)。提交前請跑：
 
 ```bash
-gcloud run deploy clawdbot \
-  --image=asia-east1-docker.pkg.dev/YOUR_PROJECT_ID/clawdbot-repo/clawdbot:v1 \
-  --region=asia-east1 \
-  --platform=managed \
-  --allow-unauthenticated \
-  --project=YOUR_PROJECT_ID \
-  --set-env-vars=GEMINI_API_KEY=你的金鑰,OPENCLAW_GATEWAY_TOKEN=你的gateway_token
+make test
 ```
 
-若連 Artifact Registry 的 repository 都已刪除，需先建立 repo 再執行方式一。
+---
 
-## Troubleshooting
+## 授權
 
-- **日誌**：
-  ```bash
-  gcloud run services logs read clawdbot --region=asia-east1 --limit=50
-  ```
-- **token mismatch / pairing required / device identity required**：請用帶 token 的 Dashboard URL，並在 Cloud Run 設定固定的 `OPENCLAW_GATEWAY_TOKEN`。詳見 [docs/GCP-部署對照與問題分析.md](docs/GCP-部署對照與問題分析.md)。
-- **Chat 回覆是空的（有助理欄位但沒文字）**：
-  1. **避免 instance 在回覆時被關掉**：設 `--min-instances=1`（見上方「Cloud Run 服務操作」），否則縮到零或換修訂時會送 SIGTERM，回覆可能沒送完就斷線。
-  2. **發送後不要重整或換頁**：WebSocket 若在回覆送出一半時斷線（code 1001），前端可能收不到完整內容；同一頁等 10～30 秒再判斷。
-  3. **確認 Gemini API 金鑰**：Cloud Run 環境變數 `GEMINI_API_KEY` 正確且有效；Config 裡 `agents.defaults.model.primary` 為 `google/gemini-3-flash-preview`。
-  4. 日誌若只有 `webchat connected/disconnected`、沒有 model/agent 相關紀錄，多半是連線或 instance 生命週期問題，先做 1、2 再試。
-
-## License
-
-GPL-3.0
-
+[GPL-3.0](LICENSE)
