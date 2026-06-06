@@ -41,6 +41,26 @@ if (!saFile && existsSync("/secrets/google-chat-sa/key.json")) {
   saFile = "/secrets/google-chat-sa/key.json";
 }
 
+// 記憶搜尋的 embedding provider。OpenClaw 內建記憶引擎預設用 OpenAI embedding，
+// 未設 OPENAI_API_KEY 時會出現 "[memory] sync failed: No API key found for provider openai"。
+// 預設改用 "gemini" → 沿用既有 GEMINI_API_KEY 做語意記憶（免 OpenAI、保留語意搜尋）。
+// 設 OPENCLAW_MEMORY_PROVIDER=none 則停用 embedding 記憶搜尋（僅關鍵字，完全免金鑰）。
+const memoryProvider = env.OPENCLAW_MEMORY_PROVIDER || "gemini";
+
+// 依 provider 組出記憶搜尋設定：
+//  none   → 停用 embedding（僅關鍵字，完全免金鑰）
+//  gemini → 用 gemini-embedding-001 + 既有 GEMINI_API_KEY（推薦；免 OpenAI、保留語意）
+//  其他   → 僅設 provider（openai/local/ollama…，需自備對應金鑰）
+function buildMemorySearch(provider, e) {
+  if (provider === "none") return { enabled: false };
+  if (provider === "gemini") {
+    const ms = { provider: "gemini", model: "gemini-embedding-001" };
+    if (e.GEMINI_API_KEY) ms.remote = { apiKey: e.GEMINI_API_KEY };
+    return ms;
+  }
+  return { provider };
+}
+
 const config = {
   gateway: {
     auth: { mode: "token", token },
@@ -58,6 +78,7 @@ const config = {
   agents: {
     defaults: {
       model: { primary: model },
+      memorySearch: buildMemorySearch(memoryProvider, env),
     },
   },
 };

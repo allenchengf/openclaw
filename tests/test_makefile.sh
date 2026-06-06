@@ -101,6 +101,17 @@ section "help 與 DEFAULT_GOAL"
 out=$(mk)              # 無參數 → 預設 help
 [[ "$out" == *"install"* && "$out" == *"doctor"* ]] && ok "無參數 make 顯示 help（含 install/doctor）" || ko "DEFAULT_GOAL=help" "$out"
 
+section "VM 生命週期防呆（vm-teardown / vm-delete）"
+printf 'GCP_PROJECT_ID=demo\nGCE_VM_NAME=clawdbot-vm\n' > "$TMP/.env"; : > "$CALLLOG"
+out=$(mk vm-teardown); rc=$?
+[[ $rc -ne 0 && "$out" == *"CONFIRM=yes"* ]] && ok "vm-teardown 無 CONFIRM → 拒絕" || ko "vm-teardown 無 CONFIRM → 拒絕" "$out"
+grep -qE "instances delete|disks delete|addresses delete" "$CALLLOG" && ko "未刪任何資源" "$(cat "$CALLLOG")" || ok "未刪任何資源"
+: > "$CALLLOG"; mkrc vm-teardown CONFIRM=yes
+grep -q "instances delete" "$CALLLOG" && grep -q "disks delete" "$CALLLOG" && grep -q "addresses delete" "$CALLLOG" && ok "CONFIRM=yes → 刪 VM+磁碟+IP" || ko "CONFIRM=yes → 全刪"
+: > "$CALLLOG"; mkrc vm-delete
+grep -q "instances delete" "$CALLLOG" && ok "vm-delete 刪 instance" || ko "vm-delete 刪 instance"
+grep -qE "disks delete|addresses delete" "$CALLLOG" && ko "vm-delete 保留磁碟與IP（記憶不丟）" "$(cat "$CALLLOG")" || ok "vm-delete 保留磁碟與IP（記憶不丟）"
+
 section "孤兒鍵 / 設定漂移防護"
 grep -q 'GOOGLE_CHAT_SA_SECRET' "$REPO_ROOT/.env.example" && ko "已移除孤兒鍵 GOOGLE_CHAT_SA_SECRET" || ok "已移除孤兒鍵 GOOGLE_CHAT_SA_SECRET"
 

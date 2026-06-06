@@ -47,6 +47,17 @@ section "案例7：自訂模型"
 out=$(OPENCLAW_GATEWAY_TOKEN="$TOK" OPENCLAW_MODEL="google/gemini-2.5-flash" node "$GEN" --stdout 2>/dev/null)
 assert_eq "model 可覆寫" "google/gemini-2.5-flash" "$(jget "$out" '.agents.defaults.model.primary')"
 
+section "案例9：記憶 embedding provider（預設 gemini，免 OpenAI）"
+out=$(OPENCLAW_GATEWAY_TOKEN="$TOK" GEMINI_API_KEY=AIzaMEMKEY node "$GEN" --stdout 2>/dev/null)
+ms=$(jget "$out" '.agents.defaults.memorySearch')
+assert_eq "provider 預設 gemini"          "gemini"               "$(jget "$out" '.agents.defaults.memorySearch.provider')"
+assert_eq "model = gemini-embedding-001"  "gemini-embedding-001" "$(jget "$out" '.agents.defaults.memorySearch.model')"
+assert_eq "remote.apiKey 帶入 Gemini 金鑰" "AIzaMEMKEY"           "$(jget "$out" '.agents.defaults.memorySearch.remote.apiKey')"
+out=$(OPENCLAW_GATEWAY_TOKEN="$TOK" OPENCLAW_MEMORY_PROVIDER=none node "$GEN" --stdout 2>/dev/null)
+assert_eq "provider=none → 停用 memorySearch" "false" "$(jget "$out" '.agents.defaults.memorySearch.enabled')"
+out=$(OPENCLAW_GATEWAY_TOKEN="$TOK" OPENCLAW_MEMORY_PROVIDER=openai node "$GEN" --stdout 2>/dev/null)
+assert_eq "provider 可覆寫為 openai" "openai" "$(jget "$out" '.agents.defaults.memorySearch.provider')"
+
 section "案例8：寫入檔案模式"
 tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
 OPENCLAW_GATEWAY_TOKEN="$TOK" OPENCLAW_CONFIG_PATH="$tmp/openclaw.json" node "$GEN" >/dev/null 2>&1

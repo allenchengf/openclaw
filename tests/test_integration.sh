@@ -27,9 +27,11 @@ else
 fi
 
 section "CONFIG_ONLY 模式（不啟動 gateway 只產生設定）"
-co=$(docker run --rm -e OPENCLAW_GATEWAY_TOKEN="$TOK" -e CLAWDBOT_CONFIG_ONLY=1 "$IMG" 2>&1)
+co=$(docker run --rm -e OPENCLAW_GATEWAY_TOKEN="$TOK" -e GEMINI_API_KEY="secret-mem-key" -e CLAWDBOT_CONFIG_ONLY=1 "$IMG" 2>&1)
 assert_contains "印出 config 路徑" "$co" "Config written"
 assert_contains "token 已遮蔽顯示"  "$co" '"token": "***"'
+assert_contains "apiKey 已遮蔽顯示" "$co" '"apiKey": "***"'
+assert_not_contains "金鑰未明文外洩於日誌" "$co" "secret-mem-key"
 assert_contains "正常結束訊息"      "$co" "exiting without starting gateway"
 
 section "啟動 gateway 容器"
@@ -57,5 +59,17 @@ section "容器內設定正確性"
 cfg=$(docker exec "$NAME" cat /root/.openclaw/openclaw.json 2>/dev/null)
 assert_contains "config token 正確" "$cfg" "$TOK"
 assert_contains "allowedOrigins 含公開URL" "$cfg" "$URL"
+
+section "設定路徑與模型解析（OPENCLAW_HOME 回歸防護）"
+val=$(docker exec "$NAME" bash -lc 'openclaw config validate 2>&1' 2>/dev/null)
+assert_contains "openclaw config validate 通過" "$val" "Config valid"
+mp=$(docker exec "$NAME" bash -lc 'openclaw config get agents.defaults.model.primary 2>&1' 2>/dev/null)
+assert_eq "解析到 google 模型（非掉回預設）" "google/gemini-3-flash-preview" "$mp"
+prov=$(docker exec "$NAME" bash -lc 'openclaw config get agents.defaults.memorySearch.provider 2>&1' 2>/dev/null)
+assert_eq "memorySearch.provider=gemini" "gemini" "$prov"
+# 啟動日誌應出現 google 模型自動啟用、且無 openai embedding 錯誤
+boot=$(docker logs "$NAME" 2>&1)
+assert_contains "google 模型自動啟用" "$boot" "model configured, enabled automatically"
+assert_not_contains "無 openai embedding 金鑰錯誤" "$boot" 'No API key found for provider "openai"'
 
 finish

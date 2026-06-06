@@ -44,7 +44,7 @@ if ! command -v gcloud >/dev/null 2>&1; then
 fi
 
 echo ""; echo "▸ GCP 認證與專案"
-acct=$(gcloud config get-value account 2>/dev/null)
+acct="${GCP_ACCOUNT:-$(gcloud config get-value account 2>/dev/null)}"
 [[ -n "$acct" ]] && ok "gcloud 已登入（${acct}）" || bad "gcloud 未登入" "gcloud auth login"
 if [[ -n "${GCP_PROJECT_ID:-}" ]]; then
   if "${GCLOUD[@]}" projects describe "$GCP_PROJECT_ID" >/dev/null 2>&1; then ok "可存取專案 $GCP_PROJECT_ID"; else bad "無法存取專案 $GCP_PROJECT_ID"; fi

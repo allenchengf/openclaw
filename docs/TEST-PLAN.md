@@ -525,3 +525,53 @@
 - [ ] 冷啟動（min-instances=0）後首次請求可正常喚醒
 - [ ] 圖片生成（Nano Banana）：標準金鑰有圖片配額時可出圖
 - [ ] Dashboard 無痕視窗 + fragment token 可連線
+
+---
+
+## 記憶與持久化驗證（2026-06-06 補充）
+
+針對「Memory Search 報錯」與「跨重啟失憶」問題的修復與實測：
+
+### 修復
+| 問題 | 根因 | 修復 |
+|------|------|------|
+| `Memory Search ❌ ERROR`（`No API key for provider openai`） | (1) 記憶 embedding 預設用 OpenAI；(2) Dockerfile 誤設 `OPENCLAW_HOME=/root/.openclaw`，openclaw 當家目錄基底再接 `.openclaw/`，記憶同步子程序讀不到設定 → 退回 openai 預設 | (1) gen-config 設 `agents.defaults.memorySearch={provider:gemini, model:gemini-embedding-001, remote.apiKey:$GEMINI_API_KEY}`；(2) 移除 `ENV OPENCLAW_HOME`，改用 `$HOME/.openclaw` |
+| bot 忘記名字 / `MEMORY.md` Missing | Cloud Run 無狀態，`~/.openclaw` 不跨重啟 | 改 GCE VM + 持久磁碟掛載 `/root/.openclaw`（`make vm-deploy`） |
+
+### 自動化回歸（test_integration.sh）
+- `openclaw config validate` → `Config valid`（鎖定 OPENCLAW_HOME 路徑回歸）
+- `config get agents.defaults.model.primary` = `google/gemini-3-flash-preview`（非掉回預設）
+- `config get agents.defaults.memorySearch.provider` = `gemini`
+- 啟動日誌含「model configured, enabled automatically」、且**不含** `No API key found for provider "openai"`
+- CONFIG_ONLY 模式 `apiKey` 遮蔽為 `***`、金鑰不外洩於日誌
+
+### 實測驗證（本機真實 Gemini 金鑰）
+- ✅ `openclaw memory index` → `Memory index updated (main).`（gemini embedding，無 openai 錯誤）
+- ✅ 持久卷重啟後 `openclaw.sqlite`(946KB) 與標記檔保留（GCE 持久磁碟機制）
+
+---
+
+## QA 矩陣 v2（GCE VM / 記憶 / doctor，2026-06-06）
+
+第二輪 QA 工作流程針對新增 surface 窮舉 **153** 案例（GCE-VM-Deploy 45、Memory-Persistence 44、Doctor-HealthCheck 64），並新增自動化套件：
+
+| 套件 | 覆蓋 | 斷言 |
+|------|------|------|
+| `tests/test_vm.sh` | gce-deploy.sh：compute API 啟用、IP/防火牆/磁碟冪等、create vs update 分支、`--container-mount-disk` 掛 /root/.openclaw、container-env 帶入、缺金鑰 fail-fast | 18 |
+| `tests/test_doctor.sh` | doctor.sh：健康全通過、缺 PROJECT_ID 失敗、服務未部署/403、無 gcloud 僅本機、set -u 多位元組安全 | 9 |
+| `tests/test_makefile.sh`（擴充） | vm-teardown CONFIRM 防呆、vm-delete 保留磁碟與 IP | +5 |
+| `tests/test_static.sh`（擴充） | shell 變數緊接全形字元防護、OPENCLAW_MEMORY_PROVIDER 漂移防護 | — |
+
+### v2 修復的 bug
+| ID | 問題 | 修復 |
+|----|------|------|
+| MEM-21/22 | cloudbuild.yaml 與 Makefile deploy 未傳 `OPENCLAW_MEMORY_PROVIDER` → Cloud Run 上 .env 改不動 | 補 substitution + --set-env-vars + Makefile deploy |
+| gce-deploy set -u | `$var` 緊接全形括號 → unbound variable | 全改 `${var}` + 靜態防護測試 |
+| compute API | VM 部署前未啟用 compute.googleapis.com | gce-deploy 開頭按需啟用 |
+| DOC-027 | doctor acct 用裸 gcloud 未套用 GCP_ACCOUNT | 改用 `${GCP_ACCOUNT:-...}` |
+
+### 真實 VM 端到端驗證（clawdbot-vm @ asia-east1-b）
+- ✅ `config validate` → Config valid；模型 google/gemini-3-flash-preview；memorySearch.provider=gemini
+- ✅ `openclaw memory index` → Memory index updated（gemini embedding，無 openai 錯誤）
+- ✅ `/dev/sdb on /root/.openclaw type ext4`（持久磁碟掛載）
+- ✅ 容器重啟後 IDENTITY.md / MARKER / sqlite 全部保留（記憶持久化）

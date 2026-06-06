@@ -79,7 +79,8 @@ By Ian Wu, The Pocket Company。歡迎台灣開發者一起完善這個框架。
 │   ├── Dockerfile             # Cloud Run 映像（npm 安裝 openclaw）
 │   ├── cloudbuild.yaml        # build → push → deploy
 │   ├── entrypoint.sh          # 產生設定 + 啟動 gateway
-│   └── gen-config.mjs         # 設定產生器（可單元測試）
+│   ├── gen-config.mjs         # 設定產生器（可單元測試）
+│   └── gce-deploy.sh          # GCE VM 部署（持久記憶）
 ├── scripts/
 │   └── devices-remote.sh      # 本機對遠端 gateway 執行 devices list/approve
 ├── extensions/
@@ -87,9 +88,14 @@ By Ian Wu, The Pocket Company。歡迎台灣開發者一起完善這個框架。
 ├── tests/
 │   ├── run.sh                 # 測試總指揮
 │   ├── lib.sh                 # 斷言輔助
-│   ├── test_static.sh         # 靜態檢查（結構/語法/YAML）
-│   ├── test_config.sh         # 設定產生器單元測試
-│   ├── test_integration.sh    # 映像 build + 啟動 + smoke
+│   ├── test_static.sh         # 靜態檢查（結構/語法/YAML/漂移/全形字元）
+│   ├── test_docs.sh           # README/.env.example 與實作一致性
+│   ├── test_config.sh         # 設定產生器單元測試（gen-config）
+│   ├── test_makefile.sh       # Makefile 編排/負面/冪等（stub）
+│   ├── test_install.sh        # make install 多情境（stub）
+│   ├── test_vm.sh             # GCE VM 部署多情境（stub）
+│   ├── test_doctor.sh         # doctor 健檢多情境（stub）
+│   ├── test_integration.sh    # 映像 build + 啟動 + 記憶回歸 smoke
 │   └── test_live.sh           # 對已部署服務煙霧測試
 ├── examples/
 │   └── agents.md.example      # AGENTS.md 範本（圖片直接顯示用）
@@ -175,6 +181,8 @@ make refresh-url          # 取得實際 URL 寫回 .env 並更新服務
 | `MEMORY` / `CPU` | 資源配置 | `2Gi` / `1` |
 | `GEMINI_API_KEY` | 留空則自 Secret Manager 取 | （空） |
 | `OPENCLAW_MODEL` | 主模型 | `google/gemini-3-flash-preview` |
+| `OPENCLAW_MEMORY_PROVIDER` | 記憶 embedding provider：`gemini`(用 Gemini 金鑰)/`none`(停用)/`openai` | `gemini` |
+| `GCE_ZONE` / `GCE_VM_NAME` / `GCE_MACHINE_TYPE` / `GCE_DATA_DISK_SIZE` | GCE VM 部署參數 | `<region>-b` / `clawdbot-vm` / `e2-small` / `10GB` |
 | `OPENCLAW_GATEWAY_TOKEN` | 64 字元 hex；Dashboard/CLI 驗證 | （`make gen-token`） |
 | `OPENCLAW_PUBLIC_URL` | 對外 URL（allowedOrigins/audience） | （`make refresh-url`） |
 | `GOOGLECHAT_ENABLED` | 是否啟用 Google Chat | `true` |
@@ -194,10 +202,16 @@ make status / logs   # 查狀態 / 讀日誌（logs N=100）
 make min-instances N=1   # 設常駐實例
 make url / dashboard-url # 取服務網址 / 帶 token 的 Dashboard 網址
 make build-local / run-local / stop-local  # 本機 Docker
-make test            # 完整測試（static + config + integration）
+make test            # 完整測試（static/docs/config/makefile/install/vm/doctor/integration）
 make secret-set-gemini KEY=...  # 更新 Gemini 金鑰
 make allow-public    # 補 allUsers→run.invoker
 make clean           # 清理本機容器/暫存
+
+# GCE VM（持久記憶）
+make vm-deploy       # 部署/更新 VM（COS + 持久磁碟掛載 ~/.openclaw）
+make vm-ip / vm-dashboard / vm-status / vm-logs / vm-ssh
+make vm-delete       # 刪 VM（保留磁碟與 IP，記憶不丟）
+make vm-teardown CONFIRM=yes   # ⚠ 連磁碟與 IP 一起刪（記憶遺失）
 ```
 
 ---
@@ -239,6 +253,37 @@ make dashboard-url    # 印出 https://.../chat?session=main#token=<TOKEN>
 
 ---
 
+## 記憶與持久化（重要）
+
+OpenClaw 有長期記憶系統（學習偏好、身分、專案），存於 `~/.openclaw`：
+`state/openclaw.sqlite` 與 workspace 的 `IDENTITY.md` / `USER.md` / `MEMORY.md`。
+
+兩個關鍵注意點：
+
+1. **記憶搜尋預設用 OpenAI embedding** → 未設 `OPENAI_API_KEY` 會出現 `Memory Search ❌ ERROR`（`sync failed: No API key found for provider "openai"`）。
+   本框架**預設 `OPENCLAW_MEMORY_PROVIDER=gemini`**，沿用既有 Gemini 金鑰做語意記憶（免 OpenAI、保留語意搜尋）。
+   設 `OPENCLAW_MEMORY_PROVIDER=none` 則停用 embedding（僅關鍵字搜尋，完全免金鑰）。
+
+2. **Cloud Run 是無狀態的** → `~/.openclaw` 在容器重啟（換修訂 / 縮放 / 冷啟動）後**全部重置**，所以 bot 會「忘記」剛取的名字、`MEMORY.md` 顯示 Missing。
+
+| 部署方式 | 記憶持久性 |
+|----------|------------|
+| Cloud Run（`make install`） | ⚠ 單一常駐實例存活期間有記憶；**重啟即重置** |
+| **GCE VM（`make vm-deploy`）** | ✅ 持久磁碟掛載 `~/.openclaw`，**跨容器/VM 重啟保留** |
+
+### GCE VM 部署（持久記憶，推薦長期使用）
+
+```bash
+# .env 已含 GCE_ZONE / GCE_VM_NAME / GCE_MACHINE_TYPE / GCE_DATA_DISK_SIZE 預設
+make vm-deploy        # 靜態IP → 防火牆 → 持久磁碟 → COS VM 跑容器(掛載 ~/.openclaw)
+make vm-dashboard     # 取得帶 token 的 Dashboard 網址（http://VM_IP:8080，無痕開）
+make vm-logs          # 看容器日誌
+```
+
+- 記憶存在持久磁碟 `clawdbot-vm-data`，掛載到容器 `/root/.openclaw`；`make vm-delete` 重建 VM 後記憶仍在。
+- VM 採固定外部 IP（webhook 穩定）。**正式上線的 Google Chat / LINE webhook 與 Dashboard 安全內容（secure context）需 HTTPS** → 建議在 VM 前加反向代理（Caddy / Nginx + Let's Encrypt，需網域）。
+- 成本：VM 為常時計費（`e2-small` 約 US$13/月）；不用時 `make vm-delete`（保留磁碟）即可省運算費。
+
 ## 測試
 
 完全用本機可得工具（`bash`/`node`/`docker`），缺 `shellcheck`/`hadolint`/`PyYAML` 會自動略過。
@@ -250,6 +295,8 @@ make test-docs         # README / .env.example 與實作一致性
 make test-config       # 設定產生器單元測試（gen-config.mjs 各分支）
 make test-makefile     # Makefile 編排 / 負面 / 冪等（stub gcloud，不碰雲端）
 make test-install      # make install 多情境（7 情境，stub gcloud）
+make test-vm           # GCE VM 部署多情境（stub gcloud）
+make test-doctor       # doctor 健檢多情境（stub gcloud）
 make test-integration  # build 映像 → 啟動 → HTTP/token smoke
 make test-live         # 對已部署服務煙霧測試（讀 .env 的 URL+token）
 make doctor            # 功能檢測（本機 + GCP 前置 + 服務健康 + token）
@@ -258,7 +305,7 @@ bash tests/run.sh --no-docker   # 跳過整合測試
 bash tests/run.sh --live        # 額外跑線上測試
 ```
 
-完整的測試矩陣（456 案例、驗收標準與手動清單）見 **[docs/TEST-PLAN.md](docs/TEST-PLAN.md)**。
+完整的測試矩陣（QA 工作流程窮舉 600+ 案例、驗收標準與手動清單）見 **[docs/TEST-PLAN.md](docs/TEST-PLAN.md)**。
 
 測試涵蓋：檔案結構合規、所有腳本語法、設定產生器各分支、Makefile 一鍵安裝/重裝/移除/健檢的編排與負面與冪等、`.env` 行內註解防呆、部署設定漂移防護（頻道 env 必須傳遞）、映像可建置與啟動、token 經 `Authorization: Bearer` 的 200/401 行為、容器內設定正確性、已部署服務健康。
 
@@ -288,6 +335,8 @@ bash tests/run.sh --live        # 額外跑線上測試
 | **Dashboard「驗證不相符 / token_mismatch」** | 瀏覽器快取舊 token。用**無痕視窗** + `make dashboard-url` 的 fragment 網址 |
 | **圖片畫不出（429 / resource exhausted）** | Gemini 圖片配額用盡。換綁定計費專案的標準 `AIza` 金鑰：`make secret-set-gemini KEY=...` 再 `make deploy` |
 | **回覆有時中斷/空白** | 縮到零時 SIGTERM 中斷。設 `make min-instances N=1` |
+| **Memory Search ❌ ERROR**（`No API key for provider openai`） | 記憶 embedding 預設走 OpenAI。本框架預設 `OPENCLAW_MEMORY_PROVIDER=gemini`（用 Gemini 金鑰）；舊部署請重新 `make deploy`/`make vm-deploy` |
+| **bot 忘記名字 / `MEMORY.md` Missing** | Cloud Run 無狀態，記憶不跨重啟。改用 `make vm-deploy`（GCE VM + 持久磁碟）|
 | **CLI 連遠端 gateway** | 用 `scripts/devices-remote.sh`，或加 `--url wss://... --token ...` |
 
 更多排錯見 [docs/GCP-部署對照與問題分析.md](docs/GCP-部署對照與問題分析.md)。

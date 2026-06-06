@@ -8,7 +8,7 @@ echo "═══ 靜態檢查 (test_static) ═══"
 section "best-practice 檔案結構"
 for f in README.md LICENSE Makefile .env.example .gitignore .dockerignore .gcloudignore \
          deploy/Dockerfile deploy/cloudbuild.yaml deploy/entrypoint.sh deploy/gen-config.mjs \
-         scripts/devices-remote.sh tests/run.sh; do
+         deploy/gce-deploy.sh scripts/devices-remote.sh scripts/doctor.sh tests/run.sh; do
   [[ -f "$f" ]] && ok "存在 $f" || ko "存在 $f" "缺少檔案"
 done
 [[ ! -f Dockerfile.cloudrun ]] && ok "舊路徑已移除 Dockerfile.cloudrun" || ko "舊路徑已移除 Dockerfile.cloudrun"
@@ -45,12 +45,12 @@ assert_cmd "make help" make help
 
 section "部署設定漂移防護（DRIFT-01：頻道 env 必須傳遞）"
 cb=$(cat deploy/cloudbuild.yaml)
-for v in GOOGLECHAT_ENABLED LINE_CHANNEL_SECRET LINE_CHANNEL_ACCESS_TOKEN; do
+for v in GOOGLECHAT_ENABLED LINE_CHANNEL_SECRET LINE_CHANNEL_ACCESS_TOKEN OPENCLAW_MEMORY_PROVIDER; do
   assert_contains "cloudbuild --set-env-vars 含 $v" "$cb" "$v="
   assert_contains "cloudbuild 宣告 substitution _$v" "$cb" "_$v"
 done
 mkf=$(cat Makefile)
-for v in _GOOGLECHAT_ENABLED _LINE_CHANNEL_SECRET _LINE_CHANNEL_ACCESS_TOKEN; do
+for v in _GOOGLECHAT_ENABLED _LINE_CHANNEL_SECRET _LINE_CHANNEL_ACCESS_TOKEN _OPENCLAW_MEMORY_PROVIDER; do
   assert_contains "Makefile deploy 帶入 $v" "$mkf" "$v="
 done
 
@@ -71,6 +71,11 @@ done
 section ".env.example 無行內註解（make include footgun 防護）"
 inline=$(grep -nE '^[A-Z][A-Z0-9_]*=.+[[:space:]]#' .env.example || true)
 [[ -z "$inline" ]] && ok ".env.example 值行無行內註解" || ko ".env.example 值行無行內註解" "$inline"
+
+section "shell 變數緊接全形字元防護（set -u 解析陷阱）"
+# $var 後緊接 CJK/全形括號會被 bash 當成變數名一部分 → set -u 報 unbound。應改用 ${var}。
+hits=$(grep -rnE '\$[A-Za-z_][A-Za-z0-9_]*[（）：，「」、。]' deploy/*.sh scripts/*.sh tests/*.sh 2>/dev/null || true)
+[[ -z "$hits" ]] && ok "無 \$var 緊接全形字元（應用 \${var}）" || ko "無 \$var 緊接全形字元" "$hits"
 
 section "選用 linter"
 if command -v shellcheck >/dev/null 2>&1; then

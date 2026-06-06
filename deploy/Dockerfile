@@ -31,8 +31,10 @@ COPY extensions /app/extensions
 RUN chmod +x /app/deploy/entrypoint.sh
 
 ENV NODE_ENV=production \
-    PORT=8080 \
-    OPENCLAW_HOME=/root/.openclaw
+    PORT=8080
+# 注意：不要設 OPENCLAW_HOME=/root/.openclaw。openclaw 把 OPENCLAW_HOME 當「家目錄基底」
+# 會再接 .openclaw/，導致設定路徑變成 /root/.openclaw/.openclaw/ → CLI/記憶同步找不到設定、
+# 模型掉回預設、記憶 embedding 誤用 OpenAI。改用 $HOME（/root）預設即可，設定在 /root/.openclaw/。
 
 EXPOSE 8080
 

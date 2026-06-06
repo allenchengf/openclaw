@@ -7,8 +7,9 @@
 #   OPENCLAW_MODEL           主要模型（預設 google/gemini-3-flash-preview）
 #   PORT                     監聽埠（Cloud Run 注入，預設 8080）
 #   OPENCLAW_BIND            gateway 綁定模式（預設 lan）
-#   OPENCLAW_HOME            設定目錄（預設 $HOME/.openclaw；測試可覆寫）
+#   OPENCLAW_CONFIG_DIR      設定目錄（預設 $HOME/.openclaw；測試可覆寫）
 #   CLAWDBOT_CONFIG_ONLY=1   只產生並驗證設定後結束，不啟動 gateway（供測試用）
+# 注意：勿設 OPENCLAW_HOME（openclaw 會當家目錄基底再接 .openclaw/，造成路徑錯亂）。
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -21,10 +22,10 @@ if [[ -z "${OPENCLAW_GATEWAY_TOKEN:-}" ]]; then
   echo "[entrypoint] Generated random OPENCLAW_GATEWAY_TOKEN" 1>&2
 fi
 
-# 2) 解析設定路徑
-OPENCLAW_HOME="${OPENCLAW_HOME:-$HOME/.openclaw}"
-mkdir -p "${OPENCLAW_HOME}"
-CONFIG_PATH="${OPENCLAW_HOME}/openclaw.json"
+# 2) 解析設定路徑（openclaw 預設讀 $HOME/.openclaw/openclaw.json）
+CONFIG_DIR="${OPENCLAW_CONFIG_DIR:-$HOME/.openclaw}"
+mkdir -p "${CONFIG_DIR}"
+CONFIG_PATH="${CONFIG_DIR}/openclaw.json"
 
 # 3) 用 node 產生設定（正確跳脫，避免字串拼接 bug）
 OPENCLAW_CONFIG_PATH="${CONFIG_PATH}" node "${SCRIPT_DIR}/gen-config.mjs"
@@ -34,7 +35,8 @@ node -e "JSON.parse(require('fs').readFileSync('${CONFIG_PATH}','utf8'))" \
   || { echo "[entrypoint] ERROR: generated config is not valid JSON" 1>&2; exit 1; }
 
 echo "[entrypoint] Config written to ${CONFIG_PATH}"
-sed 's/"token": "[^"]*"/"token": "***"/' "${CONFIG_PATH}"
+# 顯示設定但遮蔽機密（token / apiKey）
+sed -E 's/"(token|apiKey)": "[^"]*"/"\1": "***"/g' "${CONFIG_PATH}"
 
 # 5) 測試模式：只產生設定即結束
 if [[ "${CLAWDBOT_CONFIG_ONLY:-}" == "1" ]]; then
