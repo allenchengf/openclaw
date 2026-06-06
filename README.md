@@ -349,7 +349,8 @@ bash tests/run.sh --live        # 額外跑線上測試
 
 > 業界主流工具：`brew install shellcheck hadolint gitleaks trivy`。`make test` 會跑 shellcheck/hadolint/gitleaks（未裝則略過）；`trivy` 因較重獨立為 `make lint-trivy`（其回報的 base 映像 / 上游相依 CVE 屬資訊性）。
 
-完整的測試矩陣（QA 工作流程窮舉 600+ 案例、驗收標準與手動清單）見 **[docs/TEST-PLAN.md](docs/TEST-PLAN.md)**。
+完整的測試矩陣（QA 工作流程窮舉 600+ 案例）見 **[docs/TEST-PLAN.md](docs/TEST-PLAN.md)**；
+小龍蝦功能的**驗收標準（AC）與 dogfooding 結果**見 **[docs/ACCEPTANCE-CRITERIA.md](docs/ACCEPTANCE-CRITERIA.md)**。
 
 測試涵蓋：檔案結構合規、所有腳本語法、設定產生器各分支、Makefile 一鍵安裝/重裝/移除/健檢的編排與負面與冪等、`.env` 行內註解防呆、部署設定漂移防護（頻道 env 必須傳遞）、映像可建置與啟動、token 經 `Authorization: Bearer` 的 200/401 行為、容器內設定正確性、已部署服務健康。
 
