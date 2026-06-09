@@ -17,7 +17,7 @@ out=$(OPENCLAW_GATEWAY_TOKEN="$TOK" node "$GEN" --stdout 2>/dev/null)
 assert_cmd "輸出為合法 JSON" bash -c "node -e 'JSON.parse(process.argv[1])' \"\$0\"" "$out"
 assert_eq "auth.mode=token"        "token" "$(jget "$out" '.gateway.auth.mode')"
 assert_eq "auth.token 正確寫入"     "$TOK"  "$(jget "$out" '.gateway.auth.token')"
-assert_eq "model 預設"             "google/gemini-2.5-flash" "$(jget "$out" '.agents.defaults.model.primary')"
+assert_eq "model 預設"             "google-vertex/gemini-2.5-flash" "$(jget "$out" '.agents.defaults.model.primary')"
 assert_eq "deviceAuth 已豁免"       "true"  "$(jget "$out" '.gateway.controlUi.dangerouslyDisableDeviceAuth')"
 assert_contains "googlechat 啟用"   "$out"  '"googlechat"'
 

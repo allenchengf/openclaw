@@ -45,10 +45,16 @@ echo "▶ [3/5] 持久資料磁碟（$DISK ${DISK_SIZE}）"
 "${G[@]}" compute disks describe "$DISK" --zone="$ZONE" >/dev/null 2>&1 \
   || "${G[@]}" compute disks create "$DISK" --size="$DISK_SIZE" --zone="$ZONE"
 
-echo "▶ [4/5] 解析 Gemini 金鑰"
+MODEL="${OPENCLAW_MODEL:-google-vertex/gemini-2.5-flash}"
+echo "▶ [4/5] 解析模型認證（model=${MODEL}）"
 GEMINI="${GEMINI_API_KEY:-}"
 [[ -z "$GEMINI" ]] && GEMINI="$("${G[@]}" secrets versions access latest --secret=gemini-api-key 2>/dev/null || true)"
-[[ -n "$GEMINI" ]] || { echo "✗ 找不到 Gemini 金鑰（.env GEMINI_API_KEY 或 Secret Manager）"; exit 1; }
+# Vertex（google-vertex/*）用 SA ADC、免 API 金鑰；google/* 才需 GEMINI_API_KEY。
+if [[ "$MODEL" == google-vertex/* ]]; then
+  echo "  Vertex AI 模式：用 VM service account ADC，免 Gemini 金鑰（需 GOOGLE_CLOUD_PROJECT/LOCATION + SA 具 aiplatform.user）"
+elif [[ -z "$GEMINI" ]]; then
+  echo "✗ 找不到 Gemini 金鑰（.env GEMINI_API_KEY 或 Secret Manager）；model=${MODEL} 需此金鑰（Vertex 模式 google-vertex/* 則免）"; exit 1
+fi
 
 # 容器環境變數（PUBLIC_URL 用靜態 IP，故建立前即可確定）
 PUBLIC_URL="http://${IP}:8080"
@@ -56,7 +62,9 @@ ENV_ARGS=(
   "--container-env=GEMINI_API_KEY=${GEMINI}"
   "--container-env=OPENCLAW_GATEWAY_TOKEN=${OPENCLAW_GATEWAY_TOKEN:-}"
   "--container-env=OPENCLAW_PUBLIC_URL=${PUBLIC_URL}"
-  "--container-env=OPENCLAW_MODEL=${OPENCLAW_MODEL:-google/gemini-3-flash-preview}"
+  "--container-env=OPENCLAW_MODEL=${MODEL}"
+  "--container-env=GOOGLE_CLOUD_PROJECT=${GOOGLE_CLOUD_PROJECT:-$GCP_PROJECT_ID}"
+  "--container-env=GOOGLE_CLOUD_LOCATION=${GOOGLE_CLOUD_LOCATION:-global}"
   "--container-env=OPENCLAW_MEMORY_PROVIDER=${MEM_PROVIDER}"
   "--container-env=GOOGLECHAT_ENABLED=${GOOGLECHAT_ENABLED:-true}"
   "--container-env=LINE_CHANNEL_SECRET=${LINE_CHANNEL_SECRET:-}"

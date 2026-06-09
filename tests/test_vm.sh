@@ -60,6 +60,8 @@ called "disks create"     && ok "建立持久磁碟" || ko "建立持久磁碟"
 called "create-with-container" && ok "建立 VM(create-with-container)" || ko "建立 VM"
 called "container-mount-disk=mount-path=/root/.openclaw" && ok "掛載持久磁碟到 /root/.openclaw" || ko "掛載持久磁碟"
 called "OPENCLAW_MEMORY_PROVIDER=gemini" && ok "帶入記憶 provider=gemini" || ko "帶入記憶 provider"
+called "GOOGLE_CLOUD_PROJECT=demo" && ok "帶入 Vertex GOOGLE_CLOUD_PROJECT" || ko "帶入 Vertex 專案"
+called "GOOGLE_CLOUD_LOCATION=global" && ok "帶入 Vertex GOOGLE_CLOUD_LOCATION" || ko "帶入 Vertex location"
 called "OPENCLAW_PUBLIC_URL=http://203.0.113.50:8080" && ok "PUBLIC_URL 用靜態 IP" || ko "PUBLIC_URL 用靜態 IP"
 called "GEMINI_API_KEY=AIzaSTUB" && ok "Gemini 金鑰自 Secret 帶入" || ko "Gemini 金鑰帶入"
 

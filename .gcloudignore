@@ -7,6 +7,7 @@
 *.key
 *-sa.json
 service-account*.json
+clawdbot-dashboard.html
 tests/
 docs/
 demo/

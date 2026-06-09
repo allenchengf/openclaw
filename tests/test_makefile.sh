@@ -71,8 +71,9 @@ grep -q "delete" "$CALLLOG" && ko "未呼叫任何刪除" "$(cat "$CALLLOG")" ||
 : > "$CALLLOG"; mkrc teardown-all CONFIRM=yes
 grep -q "run services delete" "$CALLLOG" && ok "CONFIRM=yes → 執行刪除" || ko "CONFIRM=yes → 執行刪除"
 
-section "install fail-fast：無 Gemini 金鑰不得部署"
-printf 'GCP_PROJECT_ID=demo\nOPENCLAW_GATEWAY_TOKEN=tok\nGEMINI_API_KEY=\n' > "$TMP/.env"; : > "$CALLLOG"
+section "install fail-fast：google/* 模型缺 Gemini 金鑰不得部署（Vertex 預設則免金鑰）"
+# 明確用 google/* 模型才觸發金鑰需求；預設已改 Vertex(google-vertex/*) 免金鑰
+printf 'GCP_PROJECT_ID=demo\nOPENCLAW_GATEWAY_TOKEN=tok\nOPENCLAW_MODEL=google/gemini-2.5-flash\nGEMINI_API_KEY=\n' > "$TMP/.env"; : > "$CALLLOG"
 out=$(STUB_SECRET_RC=1 mk install); rc=$?
 [[ $rc -ne 0 && "$out" == *"找不到 Gemini 金鑰"* ]] && ok "缺金鑰 → fail fast" || ko "缺金鑰 → fail fast" "$out"
 grep -q "builds submit" "$CALLLOG" && ko "未觸發 builds submit" "$(grep builds "$CALLLOG")" || ok "未觸發 builds submit"

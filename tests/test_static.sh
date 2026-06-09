@@ -45,12 +45,12 @@ assert_cmd "make help" make help
 
 section "部署設定漂移防護（DRIFT-01：頻道 env 必須傳遞）"
 cb=$(cat deploy/cloudbuild.yaml)
-for v in GOOGLECHAT_ENABLED LINE_CHANNEL_SECRET LINE_CHANNEL_ACCESS_TOKEN OPENCLAW_MEMORY_PROVIDER; do
+for v in GOOGLECHAT_ENABLED LINE_CHANNEL_SECRET LINE_CHANNEL_ACCESS_TOKEN OPENCLAW_MEMORY_PROVIDER GOOGLE_CLOUD_PROJECT GOOGLE_CLOUD_LOCATION; do
   assert_contains "cloudbuild --set-env-vars 含 $v" "$cb" "$v="
   assert_contains "cloudbuild 宣告 substitution _$v" "$cb" "_$v"
 done
 mkf=$(cat Makefile)
-for v in _GOOGLECHAT_ENABLED _LINE_CHANNEL_SECRET _LINE_CHANNEL_ACCESS_TOKEN _OPENCLAW_MEMORY_PROVIDER; do
+for v in _GOOGLECHAT_ENABLED _LINE_CHANNEL_SECRET _LINE_CHANNEL_ACCESS_TOKEN _OPENCLAW_MEMORY_PROVIDER _GOOGLE_CLOUD_PROJECT _GOOGLE_CLOUD_LOCATION; do
   assert_contains "Makefile deploy 帶入 $v" "$mkf" "$v="
 done
 

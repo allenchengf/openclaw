@@ -57,9 +57,17 @@ for api in run.googleapis.com cloudbuild.googleapis.com artifactregistry.googlea
   if "${GCLOUD[@]}" services list --enabled --filter="config.name=$api" --format='value(config.name)' 2>/dev/null | grep -q "$api"; then ok "API $api"; else warn "API $api 未啟用" "make enable-apis"; fi
 done
 if "${GCLOUD[@]}" artifacts repositories describe "$AR_REPO_NAME" --location="$GCP_REGION" >/dev/null 2>&1; then ok "Artifact Registry $AR_REPO_NAME"; else warn "映像庫 $AR_REPO_NAME 不存在" "make create-repo"; fi
-if [[ -n "${GEMINI_API_KEY:-}" ]]; then ok "Gemini 金鑰（來自 .env）"; \
+MODEL="${OPENCLAW_MODEL:-google-vertex/gemini-2.5-flash}"
+if [[ "$MODEL" == google-vertex/* ]]; then
+  # Vertex AI：用 service account ADC 認證，免 Gemini 金鑰。檢查 aiplatform API 已啟用即可。
+  if "${GCLOUD[@]}" services list --enabled --filter="config.name=aiplatform.googleapis.com" --format='value(config.name)' 2>/dev/null | grep -q aiplatform; then
+    ok "Vertex AI 已就緒（model=${MODEL}，SA ADC 認證，免金鑰）"
+  else
+    warn "Vertex AI API 未啟用" "make enable-apis（model=${MODEL} 需 aiplatform.googleapis.com）"
+  fi
+elif [[ -n "${GEMINI_API_KEY:-}" ]]; then ok "Gemini 金鑰（來自 .env）"; \
 elif "${GCLOUD[@]}" secrets describe gemini-api-key >/dev/null 2>&1; then ok "Gemini 金鑰（Secret Manager）"; \
-else bad "找不到 Gemini 金鑰" "make secret-set-gemini KEY=... 或在 .env 設 GEMINI_API_KEY"; fi
+else bad "找不到 Gemini 金鑰" "make secret-set-gemini KEY=... 或 .env 設 GEMINI_API_KEY；或改用 Vertex(OPENCLAW_MODEL=google-vertex/*)"; fi
 
 echo ""; echo "▸ Cloud Run 服務健康"
 url=$("${GCLOUD[@]}" run services describe "$SERVICE_NAME" --region="$GCP_REGION" --format='value(status.url)' 2>/dev/null)

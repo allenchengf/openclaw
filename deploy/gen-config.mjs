@@ -33,7 +33,9 @@ if (!token) {
 
 const publicUrl = env.OPENCLAW_PUBLIC_URL || "https://clawdbot.asia-east1.run.app";
 const audience = env.GOOGLE_CHAT_AUDIENCE || publicUrl;
-const model = env.OPENCLAW_MODEL || "google/gemini-2.5-flash";
+// 預設用 Vertex AI（google-vertex/*）：免 API 金鑰、靠 SA ADC，吃專案試用金。
+// 需容器具 GOOGLE_CLOUD_PROJECT/GOOGLE_CLOUD_LOCATION 與 runtime SA 具 roles/aiplatform.user。
+const model = env.OPENCLAW_MODEL || "google-vertex/gemini-2.5-flash";
 
 // Service account：明確指定，或偵測 Cloud Run 慣用掛載路徑
 let saFile = env.GOOGLE_CHAT_SERVICE_ACCOUNT_FILE || "";
@@ -90,6 +92,12 @@ const config = {
     },
   },
 };
+
+// Vertex AI（google-vertex/*）：agent 解析需在 models.providers 放「憑證標記」apiKey，
+// 否則會 model_not_found。實際憑證走 GOOGLE_APPLICATION_CREDENTIALS 指向的 ADC 檔（authorized_user）。
+if (model.startsWith("google-vertex/")) {
+  config.models = { providers: { "google-vertex": { apiKey: "gcp-vertex-credentials" } } };
+}
 
 if (bool(env.GOOGLECHAT_ENABLED, true)) {
   const gc = {

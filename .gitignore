@@ -6,6 +6,8 @@
 *.key
 *-sa.json
 service-account*.json
+# 帶 gateway token 的 Dashboard 啟動檔（make dashboard-launcher 產生）
+clawdbot-dashboard.html
 
 # 作業系統
 .DS_Store

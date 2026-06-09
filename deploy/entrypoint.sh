@@ -44,6 +44,24 @@ if [[ "${CLAWDBOT_CONFIG_ONLY:-}" == "1" ]]; then
   exit 0
 fi
 
+# 5b) Vertex AI：用 google-vertex/* 模型時，確保 ADC 憑證檔存在並設 GOOGLE_APPLICATION_CREDENTIALS。
+#     openclaw 的 vertex 同步預判只認憑證檔（不認 metadata ADC）；缺檔則自 Secret Manager(vertex-adc) 取，
+#     讓 Cloud Run/VM 皆免手動佈署金鑰（runtime SA 需 roles/secretmanager.secretAccessor）。
+if [[ "${OPENCLAW_MODEL:-}" == google-vertex/* ]]; then
+  ADC_FILE="${GOOGLE_APPLICATION_CREDENTIALS:-${CONFIG_DIR}/vertex-adc.json}"
+  if [[ -s "$ADC_FILE" ]]; then
+    export GOOGLE_APPLICATION_CREDENTIALS="$ADC_FILE"
+    echo "[entrypoint] Vertex model: using existing ADC at ${ADC_FILE}"
+  else
+    echo "[entrypoint] Vertex model: fetching ADC from Secret Manager (vertex-adc)…"
+    if node "${SCRIPT_DIR}/fetch-adc.mjs" "$ADC_FILE" "${GOOGLE_CLOUD_PROJECT:-}" >&2; then
+      export GOOGLE_APPLICATION_CREDENTIALS="$ADC_FILE"
+    else
+      echo "[entrypoint] WARN: fetch vertex-adc 失敗；Vertex 認證可能無法運作（檢查 SA secretAccessor 與 secret vertex-adc）" 1>&2
+    fi
+  fi
+fi
+
 PORT="${PORT:-8080}"
 BIND="${OPENCLAW_BIND:-lan}"
 echo "[entrypoint] Starting gateway: port=${PORT} bind=${BIND} public=${OPENCLAW_PUBLIC_URL:-<unset>}"

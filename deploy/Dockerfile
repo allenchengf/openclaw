@@ -30,6 +30,7 @@ RUN npm install -g "openclaw@${OPENCLAW_VERSION}" \
 # 本專案檔案：entrypoint + 設定產生器 + 擴充套件
 COPY deploy/entrypoint.sh /app/deploy/entrypoint.sh
 COPY deploy/gen-config.mjs /app/deploy/gen-config.mjs
+COPY deploy/fetch-adc.mjs /app/deploy/fetch-adc.mjs
 COPY extensions /app/extensions
 RUN chmod +x /app/deploy/entrypoint.sh
 

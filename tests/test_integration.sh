@@ -39,6 +39,8 @@ section "啟動 gateway 容器"
 docker run -d --name "$NAME" -p "$PORT:8080" \
   -e OPENCLAW_GATEWAY_TOKEN="$TOK" \
   -e OPENCLAW_PUBLIC_URL="$URL" \
+  -e GOOGLE_CLOUD_PROJECT="test-project" \
+  -e GOOGLE_CLOUD_LOCATION="global" \
   -e GEMINI_API_KEY="local-test" "$IMG" >/dev/null
 # 等待 gateway listening（最多 ~60s）
 ready=0
@@ -65,7 +67,7 @@ section "設定路徑與模型解析（OPENCLAW_HOME 回歸防護）"
 val=$(docker exec "$NAME" bash -lc 'openclaw config validate 2>&1' 2>/dev/null)
 assert_contains "openclaw config validate 通過" "$val" "Config valid"
 mp=$(docker exec "$NAME" bash -lc 'openclaw config get agents.defaults.model.primary 2>&1' 2>/dev/null)
-assert_eq "解析到 google 模型（非掉回預設）" "google/gemini-2.5-flash" "$mp"
+assert_eq "解析到 Vertex 模型（非掉回預設）" "google-vertex/gemini-2.5-flash" "$mp"
 tz=$(docker exec "$NAME" bash -lc 'openclaw config get agents.defaults.userTimezone 2>&1' 2>/dev/null)
 assert_eq "userTimezone=Asia/Taipei" "Asia/Taipei" "$tz"
 cron=$(docker exec "$NAME" bash -lc 'openclaw config get cron.enabled 2>&1' 2>/dev/null)
