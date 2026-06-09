@@ -90,6 +90,8 @@ vertex-auth: check-env ## Vertex 身份驗證一次性設定：ADC 登入→設 
 	@echo "說明：google-vertex 模型用 Application Default Credentials(ADC) 認證 Vertex AI。"
 	@echo "      組織政策禁止建立 SA 金鑰，故採『使用者 ADC』。共 4 步，每步都會顯示實際指令。"
 	@echo ""
+	@echo "▶ [前置] 確保必要 API 已啟用（secretmanager / compute / aiplatform；全新專案必需）"
+	@$(MAKE) --no-print-directory enable-apis
 	@echo "▶ [1/4] 登入 ADC（會開瀏覽器，請務必選用 $(GCP_ACCOUNT)）"
 	@echo "    執行：gcloud auth application-default login --account=$(GCP_ACCOUNT)"
 	@gcloud auth application-default login --account=$(GCP_ACCOUNT)
@@ -108,6 +110,8 @@ vertex-store-adc: check-env ## 將本機 ADC 憑證存入 Secret Manager(vertex-
 	 if [ -n "$$email" ] && [ "$$email" != "$(GCP_ACCOUNT)" ]; then \
 	   echo "  ⚠ ADC 帳號($$email) 與 .env 的 GCP_ACCOUNT($(GCP_ACCOUNT)) 不同；該帳號需對專案有 Vertex(aiplatform.user) 權限，否則回 403。"; \
 	 fi
+	@echo "  確保 Secret Manager API 已啟用"
+	@$(GCLOUD) services enable secretmanager.googleapis.com >/dev/null 2>&1 || true
 	@echo "  存入 Secret Manager: vertex-adc"
 	@$(GCLOUD) secrets create vertex-adc --data-file="$(ADC_FILE_LOCAL)" 2>/dev/null \
 	  || $(GCLOUD) secrets versions add vertex-adc --data-file="$(ADC_FILE_LOCAL)"

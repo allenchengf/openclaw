@@ -108,8 +108,8 @@
 
 ## 需求
 
-- 本機：`gcloud`、`make`、`docker`、`node`、`openssl`、`curl`
-- 一個 Google 帳號（可建立 GCP 專案，並對該專案有 owner / Vertex 權限）
+- 本機工具：`gcloud`、`make`、`node`、`openssl`、`curl`、`python3`（`docker` 選用，僅本機整合測試需要）
+- 一個 Google 帳號（可建立 GCP 專案，並對該專案有 owner / Vertex 權限）；新帳號有免費試用額度
 - 預設用 **Vertex AI**：免 API 金鑰，但需做一次 `make vertex-auth`（下方步驟 5）
 - `GEMINI_API_KEY`（**選填**）：只有把 `OPENCLAW_MODEL` 切回 `google/*`（AI Studio）或記憶 provider 用 `gemini` 時才需要
 
@@ -117,41 +117,76 @@
 
 ## 從零開始：建立 GCP 資源
 
-第一次使用、手上還沒有任何 GCP 資源時，照下面做。**只有「建專案 / 開計費 / 裝 gcloud / Vertex 一次性身份驗證」需要手動**；其餘（啟用 API、建 Artifact Registry、Cloud Run + VM + HTTPS 部署）`make install` 會自動完成。
+第一次使用、手上還沒有任何 GCP 資源時，照下面 7 步做。**只有「裝本機工具 / 建專案 / 開計費 / Vertex 一次性身份驗證」需要手動**；其餘（啟用 API、建 Artifact Registry、Cloud Run + VM + HTTPS 部署）`make install` 會自動完成。
 
 > 預設模型為 **Vertex AI**（`google-vertex/gemini-2.5-flash`），認證走 **service account ADC（免 API 金鑰）**、計入 GCP 專案試用金。原因：免費 AI Studio `AIza` 金鑰已被 Google 帳號層級軟封（`403 project denied access`）。完整技術細節見 **[docs/VERTEX-SETUP.md](docs/VERTEX-SETUP.md)**。
 
-### 1. 建立 GCP 專案並啟用計費
+### 1. 安裝本機工具
+
+需要這些工具：`gcloud`、`make`、`node`、`python3`、`openssl`、`curl`（`docker` 選用，僅本機整合測試需要）。
+
+**macOS（建議用 [Homebrew](https://brew.sh)）**
+```bash
+# (1) 若尚未安裝 Homebrew：
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+
+# (2) make、curl、openssl 多半已內建；缺 make 時裝 Xcode 命令列工具：
+xcode-select --install        # 已安裝會提示略過
+
+# (3) 安裝其餘工具：
+brew install --cask google-cloud-sdk   # gcloud（Google Cloud CLI）
+brew install node python3              # node、python3
+
+# (4) 選用：本機整合測試用的 docker（其餘流程不需要）
+brew install --cask docker             # 安裝後請開啟一次 Docker Desktop
+```
+
+**Linux（Debian/Ubuntu 範例）**
+```bash
+sudo apt-get update && sudo apt-get install -y python3 nodejs npm openssl curl make
+# gcloud：見官方安裝頁 https://cloud.google.com/sdk/docs/install
+```
+
+**Windows**：建議用 WSL2（Ubuntu）後照上面 Linux 做；gcloud 亦有官方 Windows 安裝程式。
+
+**驗證都裝好了：**
+```bash
+for c in gcloud node python3 openssl curl make; do command -v "$c" >/dev/null 2>&1 && echo "✓ $c" || echo "✗ $c 未安裝"; done
+```
+全部 ✓ 再往下。（裝好整個專案後，`make doctor` 也會再檢查一次本機工具。）
+
+### 2. 建立 GCP 專案並啟用計費
 1. 進 [Google Cloud Console](https://console.cloud.google.com/) → 頂部專案選單 → **新增專案**（記下 **專案 ID**，如 `openclaw-taiwan-123456`）。
-2. 左側 **帳單** → 連結一個帳單帳戶（Cloud Run / Artifact Registry 需要計費）。
+2. 左側 **帳單（Billing）** → 連結一個帳單帳戶。新帳號有免費試用額度；Cloud Run / Artifact Registry / Vertex AI 都需要專案已連結計費。
 
-### 2. 安裝並登入 gcloud
+### 3. 登入 gcloud
 ```bash
-# macOS：brew install --cask google-cloud-sdk（或見官方安裝頁）
-gcloud auth login
-gcloud config set project YOUR_PROJECT_ID
+gcloud auth login                        # 用你的 Google 帳號登入（開瀏覽器）
+gcloud config set project <你的專案ID>    # 設為步驟 2 的專案
 ```
+> 用來登入的這個帳號**就是之後 `.env` 的 `GCP_ACCOUNT`**，需對專案有 **owner**（或至少 Vertex `aiplatform.user`）權限。
 
-### 3.（選用）安裝本機工具
+### 4. 取得程式碼並建立 `.env`
 ```bash
-# macOS（make 通常隨 Xcode Command Line Tools；docker 用 Docker Desktop）
-brew install node jq
+git clone <repo-url> && cd openclaw-taiwan
+cp .env.example .env
+$EDITOR .env       # 只需填 2 個必填項，其餘留預設
 ```
-
-### 4. 取得程式碼
-```bash
-git clone <repo> && cd openclaw-taiwan
-```
+| 必填變數 | 填什麼 |
+|----------|--------|
+| `GCP_PROJECT_ID` | 步驟 2 的專案 ID |
+| `GCP_ACCOUNT` | 步驟 3 登入、對專案有 owner / Vertex 權限的帳號 |
+> `GEMINI_API_KEY` **留空**即可（預設用 Vertex AI 免金鑰）；`OPENCLAW_GATEWAY_TOKEN` / `OPENCLAW_PUBLIC_URL` 留空會自動產生。
 
 ### 5. Vertex AI 一次性身份驗證（預設模型必做一次）
 
-預設模型 `google-vertex/gemini-2.5-flash` 不需要 API 金鑰，但需執行一次 `make vertex-auth` 建立 **使用者 ADC** 並存入 Secret Manager。先填好 `.env` 的 `GCP_PROJECT_ID` / `GCP_ACCOUNT` 再執行：
+預設模型 `google-vertex/gemini-2.5-flash` 不需 API 金鑰，但需執行一次 `make vertex-auth` 建立 **使用者 ADC** 並存入 Secret Manager（`.env` 已在步驟 4 填好）：
 
 ```bash
 make vertex-auth
 ```
 
-它會逐步完成下列 **4 步**（每步都印出實際指令）：
+它會**自動先啟用必要 API**（secretmanager / compute / aiplatform），再逐步完成下列 **4 步**（每步都印出實際指令）：
 
 | 步驟 | 動作 | 你要做什麼 |
 |------|------|------------|
@@ -164,15 +199,19 @@ make vertex-auth
 >
 > 若把模型切回 `google/*`（AI Studio）才需 `GEMINI_API_KEY`：開 [Google AI Studio – API Key](https://aistudio.google.com/apikey) → **Create API key** → 建議「在現有 GCP 專案中建立」並選步驟 1 的專案，複製 `AIza...` 開頭金鑰填入 `.env`。
 
-### 6. 填 `.env` 後一鍵安裝
+### 6. 一鍵安裝
 ```bash
-cp .env.example .env
-$EDITOR .env          # 填：GCP_PROJECT_ID、GCP_ACCOUNT（GEMINI_API_KEY 選填）
-make install          # 完整持久版：啟用API → Cloud Run → refresh-url → GCE VM → VM HTTPS → doctor → Dashboard 啟動檔
+make install          # 完整持久版（約 10 分鐘）
 ```
 
-> `make install` 為**完整持久版**一條龍 8 步（含 Cloud Run + GCE VM 持久記憶 + VM HTTPS）。只要無狀態 Cloud Run 可改用 `make install-cloudrun`。
-> `make install` 自動執行的等同：`make bootstrap`（`gcloud services enable run/cloudbuild/artifactregistry/secretmanager/aiplatform/compute` + 建 `clawdbot-repo` 映像庫、授予 runtime SA `roles/aiplatform.user`）、Vertex 認證偵測、Cloud Run + VM 部署、`make allow-public`、`make doctor`、產生 Dashboard 啟動檔。手動逐步見 [快速開始 › 進階](#快速開始)。
+> `make install` 為**完整持久版**一條龍 8 步（含 Cloud Run + GCE VM 持久記憶 + VM HTTPS）：啟用 API → 建映像庫 → 建置部署 Cloud Run → `allow-public` → `refresh-url` → GCE VM → VM HTTPS → `doctor` → 產生 Dashboard 啟動檔。
+> 自動執行的等同：`make bootstrap`（`gcloud services enable run/cloudbuild/artifactregistry/secretmanager/aiplatform/compute` + 建 `clawdbot-repo` 映像庫、授予 runtime SA `roles/aiplatform.user`）、Vertex 認證偵測、Cloud Run + VM 部署、`make allow-public`、`make doctor`、產生 Dashboard 啟動檔。
+> 只要無狀態 Cloud Run（不含 VM / HTTPS）：改用 `make install-cloudrun`。手動逐步見 [快速開始 › 進階](#快速開始)。
+
+### 7. 連上 Dashboard 並（選用）設定身分
+- **連線**：在 Finder **雙擊專案根目錄產生的 `clawdbot-dashboard.html`**，會自動帶 token 連上 VM 的 HTTPS Dashboard（不必手貼網址、不會掉 `#token`）。或用 `make dashboard-url` 取網址、以**無痕視窗**開啟。
+- **設定身分（選用）**：第一次進去可對 bot 說「**請記住：你叫＿＿，我叫＿＿**」，它會寫入 `IDENTITY.md` / `USER.md`（存在 VM 持久磁碟、跨重啟保留）。預設 bot 無身分（OpenClaw 原始行為），由你定義。
+- **驗證**：`make doctor` 應全綠；問 bot「你是誰／現在台灣時間」確認用 Vertex 正常回話。
 
 ---
 

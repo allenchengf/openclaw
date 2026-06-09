@@ -1,0 +1,13 @@
+# gitleaks 設定：沿用全部內建規則，額外允許文件中的「佔位符」。
+# 文件（README / docs/test-cases）的 curl 範例用 $OPENCLAW_GATEWAY_TOKEN 佔位符示範，
+# 並非真實機密；內建 curl-auth-header 規則會誤判，故在此 allowlist 該佔位符。
+# 注意：只允許「佔位符」字面，真實 token（64 hex 等）仍會被偵測。
+[extend]
+useDefault = true
+
+[allowlist]
+description = "文件範例的 $OPENCLAW_GATEWAY_TOKEN 佔位符（非真實 token）；只允許佔位符字面，真實 token 仍會被偵測"
+regexes = [
+  '''OPENCLAW_GATEWAY_TOKEN''',
+  '''wrongtoken12345''',
+]
